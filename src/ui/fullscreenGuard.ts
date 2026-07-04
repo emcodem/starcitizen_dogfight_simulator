@@ -16,7 +16,7 @@ declare global {
 // don't let any page override. That's why Ctrl isn't a default binding here: holding it
 // alongside another game key risks triggering one of those unblockable shortcuts.
 const GAME_CODES = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyR', 'KeyF', 'KeyC', 'KeyX', 'KeyV',
-  'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+  'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft'];
 
 let ctrlFlashTimeout: ReturnType<typeof setTimeout> | null = null;
 function flashCtrlDisabledWarning(): void {

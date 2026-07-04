@@ -174,11 +174,17 @@ function updateHUD(ship: Ship): void {
   const speed = Math.hypot(ship.vel.x, ship.vel.y, ship.vel.z);
   document.getElementById('s-throttle')!.textContent = Math.round(ship.throttle * 100) + '%';
   (document.getElementById('bar-throttle') as HTMLElement).style.width = Math.round(Math.abs(ship.throttle) * 100) + '%';
+  const boostPct = Math.round((ship.boostMeter / ship.type.boostCapacity) * 100);
+  const boostEl = document.getElementById('s-boost')!;
+  boostEl.textContent = boostPct + '%';
+  boostEl.className = ship.boosting ? 'value on' : 'value';
+  (document.getElementById('bar-boost') as HTMLElement).style.width = boostPct + '%';
   document.getElementById('s-speed')!.textContent = speed.toFixed(1) + ' m/s';
   document.getElementById('s-decoupled')!.textContent = ship.decoupled ? 'ON' : 'OFF';
   const brakeEl = document.getElementById('s-brake')!;
   brakeEl.textContent = ship.spaceBrakeOn ? 'ON' : 'OFF';
   brakeEl.className = ship.spaceBrakeOn ? 'value on' : 'value';
+  document.getElementById('s-mass')!.textContent = ship.type.mass.toFixed(2);
   document.getElementById('s-ship')!.textContent = ship.type.name;
   const flag = document.getElementById('s-mode-flag')!;
   flag.textContent = ship.decoupled ? 'DECOUPLED' : 'COUPLED';

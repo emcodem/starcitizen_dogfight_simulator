@@ -11,7 +11,7 @@ let pendingRebindAction: ActionName | null = null;
 
 // Maps each digital action to the joystick axis concept it corresponds to (if any),
 // so the bindings table can show keyboard and joystick side by side per control.
-// decoupleToggle/spaceBrake have no analog equivalent — those get a joystick BUTTON
+// decoupleToggle/spaceBrake/boost have no analog equivalent — those get a joystick BUTTON
 // binding instead (see BUTTON_BINDABLE_ACTIONS below).
 const ACTION_TO_AXIS_CONCEPT: Partial<Record<ActionName, AxisConcept>> = {
   pitchUp: 'pitch', pitchDown: 'pitch',
@@ -97,9 +97,12 @@ function startAxisRebind(concept: AxisConcept): void {
 }
 
 // Escape cancels an in-progress axis capture (separate from the keyboard rebind
-// Escape handler below, which only fires when pendingRebindAction is set)
+// Escape handler below, which only fires when pendingRebindAction is set). Stops
+// propagation so it doesn't also trigger the panel's own Escape-to-close handler —
+// cancelling a capture shouldn't slam the whole panel shut in the same keystroke.
 window.addEventListener('keydown', e => {
   if (e.code !== 'Escape' || !pendingAxisRebindConcept) return;
+  e.stopPropagation();
   cancelAxisRebind();
   rebindStatus.textContent = 'Joystick bind cancelled.';
   renderBindings();
@@ -112,7 +115,7 @@ window.addEventListener('keydown', e => {
 // rising edge: any button not already held at capture start that becomes
 // pressed is the one bound. No direction pairing needed (one action, one button).
 // =====================================================================
-const BUTTON_BINDABLE_ACTIONS: ActionName[] = ['decoupleToggle', 'spaceBrake'];
+const BUTTON_BINDABLE_ACTIONS: ActionName[] = ['decoupleToggle', 'spaceBrake', 'boost'];
 let pendingButtonRebindAction: ActionName | null = null;
 let buttonRebindBaseline: Array<{ index: number; buttons: boolean[] }> | null = null;
 let buttonRebindRAF: number | null = null;
@@ -168,9 +171,11 @@ function startButtonRebind(action: ActionName): void {
   buttonRebindRAF = requestAnimationFrame(pollButtonRebind);
 }
 
-// Escape cancels an in-progress button capture
+// Escape cancels an in-progress button capture (see note above the axis-capture handler
+// re: stopPropagation)
 window.addEventListener('keydown', e => {
   if (e.code !== 'Escape' || !pendingButtonRebindAction) return;
+  e.stopPropagation();
   cancelButtonRebind();
   rebindStatus.textContent = 'Joystick bind cancelled.';
   renderBindings();

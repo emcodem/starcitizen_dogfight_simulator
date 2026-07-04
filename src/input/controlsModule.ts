@@ -70,7 +70,8 @@ function defaultBindings(): KeyBindings {
     strafeUp:       [['Space'], ['KeyR']],
     strafeDown:     [['ControlLeft'], ['KeyF']],
     decoupleToggle: [['KeyC']],
-    spaceBrake:     [['KeyX']]
+    spaceBrake:     [['KeyX']],
+    boost:          [['ShiftLeft']]
   };
 }
 
@@ -84,7 +85,7 @@ const ACTION_LABELS: Record<ActionName, string> = {
   strafeForward: 'Strafe forward', strafeBack: 'Strafe back',
   strafeLeft: 'Strafe left', strafeRight: 'Strafe right',
   strafeUp: 'Strafe up', strafeDown: 'Strafe down',
-  decoupleToggle: 'Decouple toggle', spaceBrake: 'Space brake'
+  decoupleToggle: 'Decouple toggle', spaceBrake: 'Space brake', boost: 'Boost'
 };
 
 // Best-effort mapping from our sim actions to real SC action identifiers.
@@ -103,7 +104,8 @@ const ACTION_NAME_CANDIDATES: Record<ActionName, string[]> = {
   strafeUp:       ['v_strafe_up'],
   strafeDown:     ['v_strafe_down'],
   decoupleToggle: ['v_ifcs_vector_decoupling_toggle'],
-  spaceBrake:     ['v_space_brake']
+  spaceBrake:     ['v_space_brake'],
+  boost:          ['v_afterburner']
 };
 
 const TOKEN_TO_CODE: Record<string, string> = {

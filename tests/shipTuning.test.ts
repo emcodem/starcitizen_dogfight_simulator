@@ -16,6 +16,15 @@ describe('ship angular tuning', () => {
         const steadyState = ship.angularThrust[axis] / ship.angularDrag;
         expect(steadyState).toBeCloseTo(ship.maxAngVel[axis], 2);
       });
+
+      it(`${ship.name} ${axis}: boostAngularThrust / angularDrag reaches boostMaxAngVel`, () => {
+        const steadyState = ship.boostAngularThrust[axis] / ship.angularDrag;
+        expect(steadyState).toBeCloseTo(ship.boostMaxAngVel[axis], 2);
+      });
+
+      it(`${ship.name} ${axis}: boostMaxAngVel is faster than the non-boosted rate`, () => {
+        expect(ship.boostMaxAngVel[axis]).toBeGreaterThan(ship.maxAngVel[axis]);
+      });
     }
   }
 });

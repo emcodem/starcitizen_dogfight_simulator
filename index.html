@@ -25,9 +25,13 @@
     <div class="row"><span class="label">THROTTLE</span><span class="value" id="s-throttle">0%</span></div>
     <div class="bar-bg"><div class="bar-fill" id="bar-throttle" style="width:0%"></div></div>
     <br>
+    <div class="row"><span class="label">BOOST</span><span class="value" id="s-boost">100%</span></div>
+    <div class="bar-bg"><div class="bar-fill" id="bar-boost" style="width:100%"></div></div>
+    <br>
     <div class="row"><span class="label">SPEED</span><span class="value" id="s-speed">0 m/s</span></div>
     <div class="row"><span class="label">DECOUPLED</span><span class="value" id="s-decoupled">OFF</span></div>
     <div class="row"><span class="label">BRAKE</span><span class="value" id="s-brake">OFF</span></div>
+    <div class="row"><span class="label">MASS</span><span class="value" id="s-mass">0</span></div>
     <div class="row"><span class="label">SHIP</span><span class="value" id="s-ship">Gladius</span></div>
   </div>
 
@@ -64,6 +68,7 @@
 
 <button id="ctrl-toggle">CONTROLS</button>
 <div id="ctrl-panel" style="display:none">
+  <button id="ctrl-close-btn" aria-label="Close controls panel">CLOSE</button>
   <h3>Control Preset</h3>
 
   <section id="ctrl-preset-storage-section">
@@ -96,7 +101,8 @@
         style="flex:1; font-size:11px" onclick="this.select()">
       <button id="ctrl-copy-path-btn" style="margin:0; white-space:nowrap">Copy Path</button>
     </div>
-    <input type="file" id="ctrl-file-input" accept=".xml">
+    <button type="button" id="ctrl-import-actionmaps-btn">Import actionmaps.xml</button>
+    <input type="file" id="ctrl-file-input" accept=".xml" style="display:none">
     <div id="ctrl-import-results" class="ctrl-list"></div>
     <div class="ctrl-status" id="ctrl-import-status"></div>
   </section>

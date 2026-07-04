@@ -130,6 +130,9 @@ body.touch #ctrl-toggle { top: auto; bottom: 180px; }
   margin: 0 0 8px; font-size: 12px; letter-spacing: 1px;
   color: var(--accent); text-transform: uppercase; border-bottom: 1px solid var(--hud-dim); padding-bottom: 6px;
 }
+#ctrl-close-btn {
+  position: absolute; top: 10px; right: 12px; margin: 0;
+}
 #ctrl-panel section { margin-bottom: 16px; }
 #ctrl-panel label { display: block; color: var(--hud-dim); margin-bottom: 4px; }
 #ctrl-panel input[type="text"], #ctrl-panel select {

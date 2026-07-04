@@ -19,13 +19,22 @@ export interface AngularState {
 
 export interface ShipType {
   name: string;
-  mass: number;
+  mass: number;    // gameplay-tuning mass, used as rotational inertia too — see physics/step.ts
+  massKg: number;  // real-world reference mass in kg, informational only — not yet used by
+                   // physics (no established conversion from this to the tuning `mass` above)
   linearThrust: { main: number; retro: number; strafe: number; vertical: number };
-  angularThrust: AngularState;
+  angularThrust: AngularState;      // == maxAngVel * angularDrag per axis — see shipTypes.ts
   linearDrag: number;
   angularDrag: number;
   maxAngVel: AngularState;
-  scmSpeed: number;
+  scmSpeed: number;                 // coupled-mode speed cap, forward (local +Z velocity)
+  scmSpeedBack: number;             // coupled-mode speed cap, backward (local -Z velocity)
+  boostSpeedForward: number;        // coupled-mode speed cap while boosting, forward
+  boostSpeedBack: number;           // coupled-mode speed cap while boosting, backward
+  boostCapacity: number;            // seconds of boost available from a full meter
+  boostRechargeRate: number;        // meter-seconds recovered per real second while not boosting
+  boostMaxAngVel: AngularState;     // rotation-rate cap while boosting
+  boostAngularThrust: AngularState; // == boostMaxAngVel * angularDrag per axis — same derivation as angularThrust
 }
 
 export interface Ship {
@@ -37,6 +46,8 @@ export interface Ship {
   throttle: number; // -1..1, main/retro thrust intent
   decoupled: boolean;
   spaceBrakeOn: boolean;
+  boostMeter: number; // seconds of boost remaining, 0..type.boostCapacity
+  boosting: boolean;  // whether boost is actually in effect this frame (requested AND meter > 0)
   exploding: boolean;
   explosionTimer: number;
 }
@@ -48,7 +59,7 @@ export type ActionName =
   | 'strafeForward' | 'strafeBack'
   | 'strafeLeft' | 'strafeRight'
   | 'strafeUp' | 'strafeDown'
-  | 'decoupleToggle' | 'spaceBrake';
+  | 'decoupleToggle' | 'spaceBrake' | 'boost';
 
 export type KeyChord = string[]; // KeyboardEvent.code values, ANDed together
 export type KeyBindings = Record<ActionName, KeyChord[]>;

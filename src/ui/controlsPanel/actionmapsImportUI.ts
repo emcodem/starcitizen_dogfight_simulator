@@ -22,6 +22,9 @@ export function initActionmapsImportUI(): void {
   });
 
   const fileInput = document.getElementById('ctrl-file-input') as HTMLInputElement;
+  document.getElementById('ctrl-import-actionmaps-btn')!.addEventListener('click', () => {
+    fileInput.click();
+  });
   fileInput.addEventListener('change', e => {
     const file = (e.target as HTMLInputElement).files?.[0];
     if (!file) return;

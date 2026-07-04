@@ -14,6 +14,8 @@ export function makeShip(type: ShipType): Ship {
     throttle: 0, // -1..1, main/retro thrust intent
     decoupled: false,
     spaceBrakeOn: false,
+    boostMeter: type.boostCapacity,
+    boosting: false,
     exploding: false,
     explosionTimer: 0
   };
@@ -26,6 +28,8 @@ export function resetShip(ship: Ship): void {
   ship.angVel = { pitch: 0, yaw: 0, roll: 0 };
   ship.throttle = 0;
   ship.spaceBrakeOn = false;
+  ship.boostMeter = ship.type.boostCapacity;
+  ship.boosting = false;
   ship.exploding = false;
   ship.explosionTimer = 0;
   projectiles.length = 0;

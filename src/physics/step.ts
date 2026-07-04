@@ -20,10 +20,20 @@ export function step(ship: Ship, dt: number): void {
   GamepadModule.poll();
   const stick = JoystickAxes.read();
 
-  // decouple is a real toggle (edge-detected, fires once per press); space brake is
-  // hold-to-brake, not a toggle — active for exactly as long as the key/button is held
+  // decouple is a real toggle (edge-detected, fires once per press); space brake and boost are
+  // hold-based, not toggles — active for exactly as long as the key/button is held
   if (JoystickButtons.justPressed('decoupleToggle')) ship.decoupled = !ship.decoupled;
   ship.spaceBrakeOn = ControlsModule.isActive('spaceBrake') || JoystickButtons.isPressed('spaceBrake');
+
+  // boost meter: drains while boosting, recharges while not — clamped so it can't go
+  // negative or over capacity. Actual boost only takes effect while there's charge left.
+  const boostRequested = ControlsModule.isActive('boost') || JoystickButtons.isPressed('boost');
+  ship.boosting = boostRequested && ship.boostMeter > 0;
+  ship.boostMeter = clamp(
+    ship.boostMeter + (ship.boosting ? -dt : dt * ship.type.boostRechargeRate),
+    0,
+    ship.type.boostCapacity
+  );
 
   // if we just crashed, freeze controls and count down the explosion before respawning
   if (ship.exploding) {
@@ -67,19 +77,31 @@ export function step(ship: Ship, dt: number): void {
   yawInput = clamp(yawInput, -1, 1);
   rollInput = clamp(rollInput, -1, 1);
 
-  ship.angVel.pitch += pitchInput * t.angularThrust.pitch * dt;
-  ship.angVel.yaw   += yawInput   * t.angularThrust.yaw   * dt;
-  ship.angVel.roll  += rollInput  * t.angularThrust.roll  * dt;
+  // boosting raises RCS authority (angularThrust) and the rotation-rate ceiling (maxAngVel)
+  // together — angularThrust is still derived as maxAngVel * angularDrag either way (see
+  // shipTypes.ts), so full input converges to the boosted rate instead of the normal one.
+  const angularThrust = ship.boosting ? t.boostAngularThrust : t.angularThrust;
+  const maxAngVel = ship.boosting ? t.boostMaxAngVel : t.maxAngVel;
+
+  // angularThrust is a torque, not a direct acceleration — dividing by mass (acting here as
+  // rotational inertia) means a heavier ship spins up and slows down more sluggishly. This
+  // doesn't change the ship's documented max rotation rate: dividing both this term and the
+  // angular drag term below by the same mass cancels out in their steady-state ratio
+  // (angularThrust/angularDrag, still == maxAngVel — see shipTypes.ts), only the time to get
+  // there changes.
+  ship.angVel.pitch += (pitchInput * angularThrust.pitch / t.mass) * dt;
+  ship.angVel.yaw   += (yawInput   * angularThrust.yaw   / t.mass) * dt;
+  ship.angVel.roll  += (rollInput  * angularThrust.roll  / t.mass) * dt;
 
   // angular drag (dampening — simulates RCS auto-dampening like SC's flight computer)
-  ship.angVel.pitch -= ship.angVel.pitch * t.angularDrag * dt;
-  ship.angVel.yaw   -= ship.angVel.yaw   * t.angularDrag * dt;
-  ship.angVel.roll  -= ship.angVel.roll  * t.angularDrag * dt;
+  ship.angVel.pitch -= (ship.angVel.pitch * t.angularDrag / t.mass) * dt;
+  ship.angVel.yaw   -= (ship.angVel.yaw   * t.angularDrag / t.mass) * dt;
+  ship.angVel.roll  -= (ship.angVel.roll  * t.angularDrag / t.mass) * dt;
 
   // clamp angular velocity
-  ship.angVel.pitch = clamp(ship.angVel.pitch, -t.maxAngVel.pitch, t.maxAngVel.pitch);
-  ship.angVel.yaw   = clamp(ship.angVel.yaw,   -t.maxAngVel.yaw,   t.maxAngVel.yaw);
-  ship.angVel.roll  = clamp(ship.angVel.roll,  -t.maxAngVel.roll,  t.maxAngVel.roll);
+  ship.angVel.pitch = clamp(ship.angVel.pitch, -maxAngVel.pitch, maxAngVel.pitch);
+  ship.angVel.yaw   = clamp(ship.angVel.yaw,   -maxAngVel.yaw,   maxAngVel.yaw);
+  ship.angVel.roll  = clamp(ship.angVel.roll,  -maxAngVel.roll,  maxAngVel.roll);
 
   ship.quat = integrateOrientation(ship.quat, ship.angVel, dt);
 
@@ -106,12 +128,35 @@ export function step(ship: Ship, dt: number): void {
   addScaled(accel, up, (strafeInput.y * t.linearThrust.vertical) / t.mass);
 
   if (ship.spaceBrakeOn) {
-    // space brake: actively kill velocity, works in either flight mode
-    // (in coupled mode this just adds to the normal drag; in decoupled
-    // mode there's no passive drag, so this is the only way to stop)
-    ship.vel.x -= ship.vel.x * 3 * dt;
-    ship.vel.y -= ship.vel.y * 3 * dt;
-    ship.vel.z -= ship.vel.z * 3 * dt;
+    // Space brake: counter-thrust in whichever direction the ship is actually moving, using
+    // that axis's own real thrust rating (divided by mass, same as normal flight thrust) —
+    // not an arbitrary fixed decay constant. Works in either flight mode (in coupled mode this
+    // stacks with the normal drag below; in decoupled mode there's no passive drag, so this is
+    // the only way to stop).
+    //
+    // Decompose velocity into the ship's local frame so each axis brakes against its own
+    // thrust rating (main forward-decel vs retro backward-decel are asymmetric, like real RCS).
+    const localVel = {
+      x: ship.vel.x * right.x + ship.vel.y * right.y + ship.vel.z * right.z,          // lateral
+      y: ship.vel.x * up.x + ship.vel.y * up.y + ship.vel.z * up.z,                   // vertical
+      z: ship.vel.x * forward.x + ship.vel.y * forward.y + ship.vel.z * forward.z     // longitudinal
+    };
+    const longitudinalThrust = localVel.z > 0 ? t.linearThrust.retro : t.linearThrust.main;
+
+    // decelerate at the ship's max available rate for this axis, but never overshoot past
+    // zero into the opposite direction within a single frame
+    const decelerate = (v: number, thrust: number): number => {
+      const maxDelta = (thrust / t.mass) * dt;
+      return Math.abs(v) <= maxDelta ? 0 : v - Math.sign(v) * maxDelta;
+    };
+    localVel.x = decelerate(localVel.x, t.linearThrust.strafe);
+    localVel.y = decelerate(localVel.y, t.linearThrust.vertical);
+    localVel.z = decelerate(localVel.z, longitudinalThrust);
+
+    // recompose back into world space (right/up/forward form an orthonormal basis)
+    ship.vel.x = right.x * localVel.x + up.x * localVel.y + forward.x * localVel.z;
+    ship.vel.y = right.y * localVel.x + up.y * localVel.y + forward.y * localVel.z;
+    ship.vel.z = right.z * localVel.x + up.z * localVel.y + forward.z * localVel.z;
   }
 
   ship.vel.x += accel.x * dt;
@@ -125,10 +170,16 @@ export function step(ship: Ship, dt: number): void {
     ship.vel.y -= ship.vel.y * drag * dt;
     ship.vel.z -= ship.vel.z * drag * dt;
 
-    // flight computer speed limiter: hard-caps velocity at SCM speed, same as in-game coupled flight
+    // flight computer speed limiter: hard-caps velocity at SCM speed (or the ship's separate,
+    // lower reverse-speed cap when actually flying backward relative to its own nose), raised
+    // to the ship's (directional) boost speed while boosting
+    const forwardSpeed = ship.vel.x * forward.x + ship.vel.y * forward.y + ship.vel.z * forward.z;
+    const speedCap = ship.boosting
+      ? (forwardSpeed >= 0 ? t.boostSpeedForward : t.boostSpeedBack)
+      : (forwardSpeed >= 0 ? t.scmSpeed : t.scmSpeedBack);
     const speed = Math.hypot(ship.vel.x, ship.vel.y, ship.vel.z);
-    if (speed > t.scmSpeed) {
-      const scale = t.scmSpeed / speed;
+    if (speed > speedCap) {
+      const scale = speedCap / speed;
       ship.vel.x *= scale;
       ship.vel.y *= scale;
       ship.vel.z *= scale;
