@@ -1,0 +1,174 @@
+:root {
+  --bg: #05070a;
+  --grid: #10161d;
+  --hud: #8fd3c7;
+  --hud-dim: #3d5a54;
+  --accent: #ff7a45;
+  --danger: #ff4d4d;
+  --font-mono: 'Courier New', monospace;
+}
+html, body {
+  margin: 0; padding: 0; overflow: hidden;
+  background: var(--bg);
+  font-family: var(--font-mono);
+  color: var(--hud);
+  height: 100%; width: 100%;
+}
+canvas { display: block; background: var(--bg); }
+
+#hud {
+  position: fixed; inset: 0; pointer-events: none;
+  font-size: 13px; letter-spacing: 0.5px;
+}
+.panel {
+  position: absolute;
+  background: rgba(5, 10, 12, 0.55);
+  border: 1px solid var(--hud-dim);
+  padding: 10px 14px;
+  line-height: 1.6;
+}
+#stats { top: 16px; left: 16px; min-width: 200px; }
+#controls { bottom: 16px; left: 16px; max-width: 280px; color: var(--hud-dim); }
+#mode-flag { top: 16px; right: 16px; text-align: right; }
+#reticle-label { bottom: 16px; right: 16px; text-align: right; color: var(--hud-dim); }
+
+.row { display: flex; justify-content: space-between; gap: 18px; }
+.label { color: var(--hud-dim); }
+.value { color: var(--hud); }
+.on { color: var(--accent); font-weight: bold; }
+.bar-bg { background: rgba(255,255,255,0.06); height: 4px; width: 100%; margin-top: 2px; }
+.bar-fill { background: var(--hud); height: 4px; }
+
+#crosshair {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 20px; height: 20px; pointer-events: none;
+}
+body.touch #crosshair { display: none; }
+#crosshair::before, #crosshair::after {
+  content: ''; position: absolute; background: var(--hud);
+}
+#crosshair::before { top: 9px; left: 0; width: 20px; height: 1px; }
+#crosshair::after { top: 0; left: 9px; width: 1px; height: 20px; }
+
+#title {
+  position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+  color: var(--hud-dim); font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
+}
+
+/* --- touch controls (minimal, testing only) --- */
+#touch-controls { display: none; }
+body.touch #touch-controls { display: block; }
+body.touch #controls { display: none; }
+
+#joy-zone {
+  position: fixed; left: 20px; bottom: 20px;
+  width: 130px; height: 130px;
+  border: 1px solid var(--hud-dim);
+  border-radius: 50%;
+  background: rgba(255,255,255,0.03);
+  touch-action: none;
+}
+#joy-stick {
+  position: absolute; left: 45px; top: 45px;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: rgba(143,211,199,0.35);
+  border: 1px solid var(--hud);
+  pointer-events: none;
+}
+
+#touch-buttons {
+  position: fixed; right: 16px; bottom: 20px;
+  display: grid;
+  grid-template-columns: repeat(4, 52px);
+  gap: 8px;
+  touch-action: none;
+}
+#touch-buttons button {
+  width: 52px; height: 44px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--hud-dim);
+  color: var(--hud);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  border-radius: 4px;
+}
+#touch-buttons button:active { background: rgba(255,122,69,0.35); border-color: var(--accent); }
+
+/* --- controls import / preset panel --- */
+#ctrl-toggle {
+  position: fixed; top: 60px; right: 16px;
+  z-index: 20;
+  background: rgba(5,10,12,0.7);
+  border: 1px solid var(--hud-dim);
+  color: var(--hud);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+#ctrl-toggle:hover { border-color: var(--accent); color: var(--accent); }
+body.touch #ctrl-toggle { top: auto; bottom: 180px; }
+
+#ctrl-panel {
+  position: fixed; top: 60px; right: 16px;
+  width: 640px; max-width: calc(100vw - 32px); max-height: 85vh; overflow-y: auto;
+  background: rgba(5,10,12,0.92);
+  border: 1px solid var(--hud-dim);
+  color: var(--hud);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 14px;
+  z-index: 21;
+}
+#ctrl-panel h3 {
+  margin: 0 0 8px; font-size: 12px; letter-spacing: 1px;
+  color: var(--accent); text-transform: uppercase; border-bottom: 1px solid var(--hud-dim); padding-bottom: 6px;
+}
+#ctrl-panel section { margin-bottom: 16px; }
+#ctrl-panel label { display: block; color: var(--hud-dim); margin-bottom: 4px; }
+#ctrl-panel input[type="text"], #ctrl-panel select {
+  width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--hud-dim);
+  color: var(--hud); font-family: var(--font-mono); font-size: 12px; padding: 5px; margin-bottom: 6px;
+}
+#ctrl-panel input[type="file"] { font-size: 11px; color: var(--hud-dim); margin-bottom: 6px; }
+#ctrl-panel button {
+  background: rgba(255,255,255,0.06); border: 1px solid var(--hud-dim); color: var(--hud);
+  font-family: var(--font-mono); font-size: 11px; padding: 6px 10px; cursor: pointer; margin: 0 6px 6px 0;
+}
+#ctrl-panel button:hover { border-color: var(--accent); color: var(--accent); }
+#ctrl-panel .ctrl-status { color: var(--hud-dim); font-size: 11px; min-height: 14px; margin-top: 4px; }
+#ctrl-panel .ctrl-list { font-size: 11px; line-height: 1.6; max-height: 160px; overflow-y: auto; }
+#ctrl-panel .ctrl-found { color: var(--hud); }
+#ctrl-panel .ctrl-missing { color: var(--hud-dim); }
+
+#ctrl-bindings-list.ctrl-list { max-height: none; overflow: visible; }
+#ctrl-bindings-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+#ctrl-bindings-table th {
+  text-align: left; color: var(--hud-dim); text-transform: uppercase; letter-spacing: 0.5px;
+  font-size: 10px; padding: 4px 8px 6px; border-bottom: 1px solid var(--hud-dim);
+}
+#ctrl-bindings-table td { padding: 5px 8px; border-bottom: 1px solid rgba(255,255,255,0.06); vertical-align: middle; }
+#ctrl-bindings-table td.ctrl-action-label { color: var(--hud-dim); white-space: nowrap; }
+#ctrl-bindings-table button { margin: 0; }
+
+#mouse-capture-hint {
+  position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%);
+  background: rgba(5,10,12,0.75); border: 1px solid var(--hud-dim);
+  color: var(--hud); font-family: var(--font-mono); font-size: 12px;
+  padding: 8px 14px; cursor: pointer; z-index: 15; text-align: center;
+}
+#mouse-capture-hint:hover { border-color: var(--accent); color: var(--accent); }
+body.touch #mouse-capture-hint { display: none; }
+body.touch #ctrl-danger-hint { display: none; }
+body.touch #fullscreen-hint { display: none; }
+
+#ctrl-flash-warning {
+  position: fixed; top: 18%; left: 50%; transform: translate(-50%, -50%);
+  background: rgba(255,77,77,0.15); border: 1px solid var(--danger); color: var(--danger);
+  font-family: var(--font-mono); font-size: 14px; letter-spacing: 0.5px;
+  padding: 10px 18px; pointer-events: none; z-index: 50;
+  opacity: 0; transition: opacity 0.15s ease;
+}
+body.touch #ctrl-flash-warning { display: none; }

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Vector — Flight Practice Sandbox</title>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<div id="startup-modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:200; align-items:center; justify-content:center;">
+  <div id="startup-modal-box" style="background:#0b1014; border:1px solid var(--hud-dim); max-width:420px; padding:20px 22px; color:var(--hud); font-family:var(--font-mono); font-size:13px; line-height:1.6;">
+    <div id="startup-modal-text"></div>
+    <label id="startup-modal-checkbox-wrap" style="display:none; align-items:center; gap:6px; margin-top:14px;">
+      <input type="checkbox" id="startup-modal-checkbox" style="width:auto"> Do not show this again
+    </label>
+    <button id="startup-modal-ok" style="margin-top:16px; background:rgba(255,255,255,0.06); border:1px solid var(--hud-dim); color:var(--hud); font-family:var(--font-mono); font-size:12px; padding:8px 16px; cursor:pointer;">OK</button>
+  </div>
+</div>
+
+<div id="hud">
+  <div id="title">Vector // Flight Practice Sandbox</div>
+
+  <div class="panel" id="stats">
+    <div class="row"><span class="label">THROTTLE</span><span class="value" id="s-throttle">0%</span></div>
+    <div class="bar-bg"><div class="bar-fill" id="bar-throttle" style="width:0%"></div></div>
+    <br>
+    <div class="row"><span class="label">SPEED</span><span class="value" id="s-speed">0 m/s</span></div>
+    <div class="row"><span class="label">DECOUPLED</span><span class="value" id="s-decoupled">OFF</span></div>
+    <div class="row"><span class="label">BRAKE</span><span class="value" id="s-brake">OFF</span></div>
+    <div class="row"><span class="label">SHIP</span><span class="value" id="s-ship">Gladius</span></div>
+  </div>
+
+  <div class="panel" id="mode-flag">
+    <div id="s-mode-flag" class="on">COUPLED</div>
+  </div>
+
+  <div class="panel" id="controls">
+    <div style="color:var(--danger)" id="ctrl-danger-hint">Ctrl is disabled until you enter fullscreen (prevents accidental Ctrl+W/Q)</div>
+    <div id="fullscreen-hint" style="cursor:pointer; color:var(--accent); pointer-events:auto">⛶ Enter fullscreen to protect Ctrl+W/Q (Chrome/Edge only)</div>
+  </div>
+
+  <div class="panel" id="reticle-label">manual flight · no target</div>
+</div>
+
+<div id="crosshair"></div>
+<div id="mouse-capture-hint">CLICK TO ENABLE MOUSE LOOK (yaw/pitch) — Esc to release</div>
+<div id="ctrl-flash-warning">⚠ Ctrl is disabled — enter fullscreen to use it</div>
+
+<div id="touch-controls">
+  <div id="joy-zone"><div id="joy-stick"></div></div>
+  <div id="touch-buttons">
+    <button id="tb-fwd">FWD</button>
+    <button id="tb-back">BACK</button>
+    <button id="tb-up">UP</button>
+    <button id="tb-down">DOWN</button>
+    <button id="tb-roll-l">ROLL◀</button>
+    <button id="tb-roll-r">ROLL▶</button>
+    <button id="tb-decouple">DE-CPL</button>
+    <button id="tb-stop">STOP</button>
+    <button id="tb-fire" style="grid-column: span 4; background: rgba(255,77,77,0.12); border-color: var(--danger); color: var(--danger);">FIRE</button>
+  </div>
+</div>
+
+<button id="ctrl-toggle">CONTROLS</button>
+<div id="ctrl-panel" style="display:none">
+  <h3>Control Preset</h3>
+
+  <section id="ctrl-preset-storage-section">
+    <label>Saved presets (this browser)</label>
+    <input type="text" id="ctrl-preset-name" placeholder="preset name">
+    <button id="ctrl-save-preset-btn">Save Current</button>
+    <select id="ctrl-preset-list"></select>
+    <button id="ctrl-load-preset-btn">Load</button>
+    <button id="ctrl-delete-preset-btn">Delete</button>
+    <div class="ctrl-status" id="ctrl-preset-status"></div>
+  </section>
+
+  <section>
+    <label>Export / import this preset as a file</label>
+    <button id="ctrl-export-btn">Export Preset (.json)</button>
+    <button type="button" id="ctrl-import-preset-btn">Import Preset (.json)</button>
+    <input type="file" id="ctrl-import-preset-input" accept=".json" style="display:none">
+    <div class="ctrl-status" id="ctrl-preset-file-status"></div>
+  </section>
+
+  <section>
+    <label>Import from Star Citizen actionmaps.xml (auto-mapped)</label>
+    <div class="ctrl-status" style="margin-bottom:6px">
+      Default profile folder — click the file dialog's address bar (or press
+      Ctrl+L) and paste this path, then Enter to jump straight there:
+    </div>
+    <div style="display:flex; gap:6px; align-items:center; margin-bottom:6px">
+      <input type="text" id="ctrl-default-path" readonly
+        value="C:\Program Files\Roberts Space Industries\StarCitizen\LIVE\USER\Client\0\Profiles\default"
+        style="flex:1; font-size:11px" onclick="this.select()">
+      <button id="ctrl-copy-path-btn" style="margin:0; white-space:nowrap">Copy Path</button>
+    </div>
+    <input type="file" id="ctrl-file-input" accept=".xml">
+    <div id="ctrl-import-results" class="ctrl-list"></div>
+    <div class="ctrl-status" id="ctrl-import-status"></div>
+  </section>
+
+  <section>
+    <h3 style="margin-top:0">Joystick / HOTAS Detection (experimental)</h3>
+    <div class="ctrl-status" style="margin-bottom:6px">
+      Checks whether the browser sees the same physical stick(s) your actionmaps.xml
+      refers to, matched by USB vendor/product ID (not by SC's js1/js2 numbering —
+      those can differ from browser enumeration order). Load the same actionmaps.xml
+      above first, then press a button or wiggle each stick — browsers only reveal a
+      device to the page after it sees input from it.
+    </div>
+    <label>Devices found in your actionmaps.xml</label>
+    <div id="ctrl-sc-devices-list" class="ctrl-list">(load actionmaps.xml above)</div>
+    <label style="margin-top:8px">Devices the browser currently sees</label>
+    <div id="ctrl-gamepad-list" class="ctrl-list">(none yet — press a button on each device)</div>
+    <div class="ctrl-status" id="ctrl-gamepad-support-status"></div>
+
+    <label style="margin-top:8px">Resolved analog axes (live)</label>
+    <div id="ctrl-axis-map-list" class="ctrl-list">(load actionmaps.xml above)</div>
+    <div class="ctrl-status" style="margin-top:4px">
+      If an axis moves the wrong way, use the Invert checkbox next to it in the Bindings
+      table below. The axis-letter-to-index mapping (which [N] is X vs Y vs twist) is a
+      best-effort default — use the live per-device axis readout above to confirm it
+      matches your hardware.
+    </div>
+  </section>
+
+  <section>
+    <h3 style="margin-top:0">Bindings</h3>
+    <div class="ctrl-status" style="margin-bottom:6px; color:var(--danger)">⚠ Ctrl is bound to strafe-down, but is disabled outside fullscreen by default — pressing it does nothing until you enter fullscreen. This prevents accidentally triggering Ctrl+W/Ctrl+Q (close tab / quit), which no page can block.</div>
+    <div id="ctrl-bindings-list" class="ctrl-list"></div>
+    <div class="ctrl-status" id="ctrl-rebind-status"></div>
+  </section>
+
+  <section>
+    <label>Mouse Look (absolute — SC-style virtual joystick)</label>
+    <div class="ctrl-status" id="ctrl-mouse-status">Not captured — click the game view to enable.</div>
+    <label style="margin-top:8px">Sensitivity</label>
+    <input type="range" id="ctrl-mouse-sens" min="0.5" max="4" step="0.1" style="width:100%">
+    <label style="display:flex; align-items:center; gap:6px; margin-top:6px">
+      <input type="checkbox" id="ctrl-mouse-invert" style="width:auto"> Invert Y
+    </label>
+    <button id="ctrl-mouse-recenter">Recenter Stick</button>
+  </section>
+
+  <section>
+    <button id="ctrl-reset-btn">Reset to Sandbox Defaults</button>
+  </section>
+</div>
+
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

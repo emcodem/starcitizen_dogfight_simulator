@@ -1,0 +1,14 @@
+import { defineConfig } from 'vite';
+
+// GitHub Actions sets GITHUB_REPOSITORY to "owner/repo" — deriving the Pages base path from
+// it means this config works under whatever repo name is chosen, with no manual edit needed
+// once the repo exists. Local dev/build (no GITHUB_ACTIONS env) just serves from the root.
+const repoName = process.env.GITHUB_REPOSITORY?.split('/')[1];
+const base = process.env.GITHUB_ACTIONS && repoName ? `/${repoName}/` : '/';
+
+export default defineConfig({
+  base,
+  build: {
+    outDir: 'dist'
+  }
+});

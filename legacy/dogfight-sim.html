@@ -1,0 +1,2268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Vector — Flight Practice Sandbox</title>
+<style>
+  :root {
+    --bg: #05070a;
+    --grid: #10161d;
+    --hud: #8fd3c7;
+    --hud-dim: #3d5a54;
+    --accent: #ff7a45;
+    --danger: #ff4d4d;
+    --font-mono: 'Courier New', monospace;
+  }
+  html, body {
+    margin: 0; padding: 0; overflow: hidden;
+    background: var(--bg);
+    font-family: var(--font-mono);
+    color: var(--hud);
+    height: 100%; width: 100%;
+  }
+  canvas { display: block; background: var(--bg); }
+
+  #hud {
+    position: fixed; inset: 0; pointer-events: none;
+    font-size: 13px; letter-spacing: 0.5px;
+  }
+  .panel {
+    position: absolute;
+    background: rgba(5, 10, 12, 0.55);
+    border: 1px solid var(--hud-dim);
+    padding: 10px 14px;
+    line-height: 1.6;
+  }
+  #stats { top: 16px; left: 16px; min-width: 200px; }
+  #controls { bottom: 16px; left: 16px; max-width: 280px; color: var(--hud-dim); }
+  #mode-flag { top: 16px; right: 16px; text-align: right; }
+  #reticle-label { bottom: 16px; right: 16px; text-align: right; color: var(--hud-dim); }
+
+  .row { display: flex; justify-content: space-between; gap: 18px; }
+  .label { color: var(--hud-dim); }
+  .value { color: var(--hud); }
+  .on { color: var(--accent); font-weight: bold; }
+  .bar-bg { background: rgba(255,255,255,0.06); height: 4px; width: 100%; margin-top: 2px; }
+  .bar-fill { background: var(--hud); height: 4px; }
+
+  #crosshair {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 20px; height: 20px; pointer-events: none;
+  }
+  body.touch #crosshair { display: none; }
+  #crosshair::before, #crosshair::after {
+    content: ''; position: absolute; background: var(--hud);
+  }
+  #crosshair::before { top: 9px; left: 0; width: 20px; height: 1px; }
+  #crosshair::after { top: 0; left: 9px; width: 1px; height: 20px; }
+
+  #title {
+    position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+    color: var(--hud-dim); font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
+  }
+
+  /* --- touch controls (minimal, testing only) --- */
+  #touch-controls { display: none; }
+  body.touch #touch-controls { display: block; }
+  body.touch #controls { display: none; }
+
+  #joy-zone {
+    position: fixed; left: 20px; bottom: 20px;
+    width: 130px; height: 130px;
+    border: 1px solid var(--hud-dim);
+    border-radius: 50%;
+    background: rgba(255,255,255,0.03);
+    touch-action: none;
+  }
+  #joy-stick {
+    position: absolute; left: 45px; top: 45px;
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: rgba(143,211,199,0.35);
+    border: 1px solid var(--hud);
+    pointer-events: none;
+  }
+
+  #touch-buttons {
+    position: fixed; right: 16px; bottom: 20px;
+    display: grid;
+    grid-template-columns: repeat(4, 52px);
+    gap: 8px;
+    touch-action: none;
+  }
+  #touch-buttons button {
+    width: 52px; height: 44px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--hud-dim);
+    color: var(--hud);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    border-radius: 4px;
+  }
+  #touch-buttons button:active { background: rgba(255,122,69,0.35); border-color: var(--accent); }
+
+  /* --- controls import / preset panel --- */
+  #ctrl-toggle {
+    position: fixed; top: 60px; right: 16px;
+    z-index: 20;
+    background: rgba(5,10,12,0.7);
+    border: 1px solid var(--hud-dim);
+    color: var(--hud);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 1px;
+    padding: 8px 12px;
+    cursor: pointer;
+  }
+  #ctrl-toggle:hover { border-color: var(--accent); color: var(--accent); }
+  body.touch #ctrl-toggle { top: auto; bottom: 180px; }
+
+  #ctrl-panel {
+    position: fixed; top: 60px; right: 16px;
+    width: 640px; max-width: calc(100vw - 32px); max-height: 85vh; overflow-y: auto;
+    background: rgba(5,10,12,0.92);
+    border: 1px solid var(--hud-dim);
+    color: var(--hud);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 14px;
+    z-index: 21;
+  }
+  #ctrl-panel h3 {
+    margin: 0 0 8px; font-size: 12px; letter-spacing: 1px;
+    color: var(--accent); text-transform: uppercase; border-bottom: 1px solid var(--hud-dim); padding-bottom: 6px;
+  }
+  #ctrl-panel section { margin-bottom: 16px; }
+  #ctrl-panel label { display: block; color: var(--hud-dim); margin-bottom: 4px; }
+  #ctrl-panel input[type="text"], #ctrl-panel select {
+    width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--hud-dim);
+    color: var(--hud); font-family: var(--font-mono); font-size: 12px; padding: 5px; margin-bottom: 6px;
+  }
+  #ctrl-panel input[type="file"] { font-size: 11px; color: var(--hud-dim); margin-bottom: 6px; }
+  #ctrl-panel button {
+    background: rgba(255,255,255,0.06); border: 1px solid var(--hud-dim); color: var(--hud);
+    font-family: var(--font-mono); font-size: 11px; padding: 6px 10px; cursor: pointer; margin: 0 6px 6px 0;
+  }
+  #ctrl-panel button:hover { border-color: var(--accent); color: var(--accent); }
+  #ctrl-panel .ctrl-status { color: var(--hud-dim); font-size: 11px; min-height: 14px; margin-top: 4px; }
+  #ctrl-panel .ctrl-list { font-size: 11px; line-height: 1.6; max-height: 160px; overflow-y: auto; }
+  #ctrl-panel .ctrl-found { color: var(--hud); }
+  #ctrl-panel .ctrl-missing { color: var(--hud-dim); }
+
+  #ctrl-bindings-list.ctrl-list { max-height: none; overflow: visible; }
+  #ctrl-bindings-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  #ctrl-bindings-table th {
+    text-align: left; color: var(--hud-dim); text-transform: uppercase; letter-spacing: 0.5px;
+    font-size: 10px; padding: 4px 8px 6px; border-bottom: 1px solid var(--hud-dim);
+  }
+  #ctrl-bindings-table td { padding: 5px 8px; border-bottom: 1px solid rgba(255,255,255,0.06); vertical-align: middle; }
+  #ctrl-bindings-table td.ctrl-action-label { color: var(--hud-dim); white-space: nowrap; }
+  #ctrl-bindings-table button { margin: 0; }
+
+  #mouse-capture-hint {
+    position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%);
+    background: rgba(5,10,12,0.75); border: 1px solid var(--hud-dim);
+    color: var(--hud); font-family: var(--font-mono); font-size: 12px;
+    padding: 8px 14px; cursor: pointer; z-index: 15; text-align: center;
+  }
+  #mouse-capture-hint:hover { border-color: var(--accent); color: var(--accent); }
+  body.touch #mouse-capture-hint { display: none; }
+  body.touch #ctrl-danger-hint { display: none; }
+  body.touch #fullscreen-hint { display: none; }
+
+  #ctrl-flash-warning {
+    position: fixed; top: 18%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(255,77,77,0.15); border: 1px solid var(--danger); color: var(--danger);
+    font-family: var(--font-mono); font-size: 14px; letter-spacing: 0.5px;
+    padding: 10px 18px; pointer-events: none; z-index: 50;
+    opacity: 0; transition: opacity 0.15s ease;
+  }
+  body.touch #ctrl-flash-warning { display: none; }
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<div id="startup-modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:200; align-items:center; justify-content:center;">
+  <div id="startup-modal-box" style="background:#0b1014; border:1px solid var(--hud-dim); max-width:420px; padding:20px 22px; color:var(--hud); font-family:var(--font-mono); font-size:13px; line-height:1.6;">
+    <div id="startup-modal-text"></div>
+    <label id="startup-modal-checkbox-wrap" style="display:none; align-items:center; gap:6px; margin-top:14px;">
+      <input type="checkbox" id="startup-modal-checkbox" style="width:auto"> Do not show this again
+    </label>
+    <button id="startup-modal-ok" style="margin-top:16px; background:rgba(255,255,255,0.06); border:1px solid var(--hud-dim); color:var(--hud); font-family:var(--font-mono); font-size:12px; padding:8px 16px; cursor:pointer;">OK</button>
+  </div>
+</div>
+
+<div id="hud">
+  <div id="title">Vector // Flight Practice Sandbox</div>
+
+  <div class="panel" id="stats">
+    <div class="row"><span class="label">THROTTLE</span><span class="value" id="s-throttle">0%</span></div>
+    <div class="bar-bg"><div class="bar-fill" id="bar-throttle" style="width:0%"></div></div>
+    <br>
+    <div class="row"><span class="label">SPEED</span><span class="value" id="s-speed">0 m/s</span></div>
+    <div class="row"><span class="label">DECOUPLED</span><span class="value" id="s-decoupled">OFF</span></div>
+    <div class="row"><span class="label">BRAKE</span><span class="value" id="s-brake">OFF</span></div>
+    <div class="row"><span class="label">SHIP</span><span class="value" id="s-ship">Gladius</span></div>
+  </div>
+
+  <div class="panel" id="mode-flag">
+    <div id="s-mode-flag" class="on">COUPLED</div>
+  </div>
+
+  <div class="panel" id="controls">
+    <div style="color:var(--danger)" id="ctrl-danger-hint">Ctrl is disabled until you enter fullscreen (prevents accidental Ctrl+W/Q)</div>
+    <div id="fullscreen-hint" style="cursor:pointer; color:var(--accent); pointer-events:auto">⛶ Enter fullscreen to protect Ctrl+W/Q (Chrome/Edge only)</div>
+  </div>
+
+  <div class="panel" id="reticle-label">manual flight · no target</div>
+</div>
+
+<div id="crosshair"></div>
+<div id="mouse-capture-hint">CLICK TO ENABLE MOUSE LOOK (yaw/pitch) — Esc to release</div>
+<div id="ctrl-flash-warning">⚠ Ctrl is disabled — enter fullscreen to use it</div>
+
+<div id="touch-controls">
+  <div id="joy-zone"><div id="joy-stick"></div></div>
+  <div id="touch-buttons">
+    <button id="tb-fwd">FWD</button>
+    <button id="tb-back">BACK</button>
+    <button id="tb-up">UP</button>
+    <button id="tb-down">DOWN</button>
+    <button id="tb-roll-l">ROLL◀</button>
+    <button id="tb-roll-r">ROLL▶</button>
+    <button id="tb-decouple">DE-CPL</button>
+    <button id="tb-stop">STOP</button>
+    <button id="tb-fire" style="grid-column: span 4; background: rgba(255,77,77,0.12); border-color: var(--danger); color: var(--danger);">FIRE</button>
+  </div>
+</div>
+
+<button id="ctrl-toggle">CONTROLS</button>
+<div id="ctrl-panel" style="display:none">
+  <h3>Control Preset</h3>
+
+  <section id="ctrl-preset-storage-section">
+    <label>Saved presets (this browser)</label>
+    <input type="text" id="ctrl-preset-name" placeholder="preset name">
+    <button id="ctrl-save-preset-btn">Save Current</button>
+    <select id="ctrl-preset-list"></select>
+    <button id="ctrl-load-preset-btn">Load</button>
+    <button id="ctrl-delete-preset-btn">Delete</button>
+    <div class="ctrl-status" id="ctrl-preset-status"></div>
+  </section>
+
+  <section>
+    <label>Export / import this preset as a file</label>
+    <button id="ctrl-export-btn">Export Preset (.json)</button>
+    <button type="button" id="ctrl-import-preset-btn">Import Preset (.json)</button>
+    <input type="file" id="ctrl-import-preset-input" accept=".json" style="display:none">
+    <div class="ctrl-status" id="ctrl-preset-file-status"></div>
+  </section>
+
+  <section>
+    <label>Import from Star Citizen actionmaps.xml (auto-mapped)</label>
+    <div class="ctrl-status" style="margin-bottom:6px">
+      Default profile folder — click the file dialog's address bar (or press
+      Ctrl+L) and paste this path, then Enter to jump straight there:
+    </div>
+    <div style="display:flex; gap:6px; align-items:center; margin-bottom:6px">
+      <input type="text" id="ctrl-default-path" readonly
+        value="C:\Program Files\Roberts Space Industries\StarCitizen\LIVE\USER\Client\0\Profiles\default"
+        style="flex:1; font-size:11px" onclick="this.select()">
+      <button id="ctrl-copy-path-btn" style="margin:0; white-space:nowrap">Copy Path</button>
+    </div>
+    <input type="file" id="ctrl-file-input" accept=".xml">
+    <div id="ctrl-import-results" class="ctrl-list"></div>
+    <div class="ctrl-status" id="ctrl-import-status"></div>
+  </section>
+
+  <section>
+    <h3 style="margin-top:0">Joystick / HOTAS Detection (experimental)</h3>
+    <div class="ctrl-status" style="margin-bottom:6px">
+      Checks whether the browser sees the same physical stick(s) your actionmaps.xml
+      refers to, matched by USB vendor/product ID (not by SC's js1/js2 numbering —
+      those can differ from browser enumeration order). Load the same actionmaps.xml
+      above first, then press a button or wiggle each stick — browsers only reveal a
+      device to the page after it sees input from it.
+    </div>
+    <label>Devices found in your actionmaps.xml</label>
+    <div id="ctrl-sc-devices-list" class="ctrl-list">(load actionmaps.xml above)</div>
+    <label style="margin-top:8px">Devices the browser currently sees</label>
+    <div id="ctrl-gamepad-list" class="ctrl-list">(none yet — press a button on each device)</div>
+    <div class="ctrl-status" id="ctrl-gamepad-support-status"></div>
+
+    <label style="margin-top:8px">Resolved analog axes (live)</label>
+    <div id="ctrl-axis-map-list" class="ctrl-list">(load actionmaps.xml above)</div>
+    <div class="ctrl-status" style="margin-top:4px">
+      If an axis moves the wrong way, use the Invert checkbox next to it in the Bindings
+      table below. The axis-letter-to-index mapping (which [N] is X vs Y vs twist) is a
+      best-effort default — use the live per-device axis readout above to confirm it
+      matches your hardware.
+    </div>
+  </section>
+
+  <section>
+    <h3 style="margin-top:0">Bindings</h3>
+    <div class="ctrl-status" style="margin-bottom:6px; color:var(--danger)">⚠ Ctrl is bound to strafe-down, but is disabled outside fullscreen by default — pressing it does nothing until you enter fullscreen. This prevents accidentally triggering Ctrl+W/Ctrl+Q (close tab / quit), which no page can block.</div>
+    <div id="ctrl-bindings-list" class="ctrl-list"></div>
+    <div class="ctrl-status" id="ctrl-rebind-status"></div>
+  </section>
+
+  <section>
+    <label>Mouse Look (absolute — SC-style virtual joystick)</label>
+    <div class="ctrl-status" id="ctrl-mouse-status">Not captured — click the game view to enable.</div>
+    <label style="margin-top:8px">Sensitivity</label>
+    <input type="range" id="ctrl-mouse-sens" min="0.5" max="4" step="0.1" style="width:100%">
+    <label style="display:flex; align-items:center; gap:6px; margin-top:6px">
+      <input type="checkbox" id="ctrl-mouse-invert" style="width:auto"> Invert Y
+    </label>
+    <button id="ctrl-mouse-recenter">Recenter Stick</button>
+  </section>
+
+  <section>
+    <button id="ctrl-reset-btn">Reset to Sandbox Defaults</button>
+  </section>
+</div>
+
+<script>
+(function(){
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  function resize(){ canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+  window.addEventListener('resize', resize); resize();
+
+  // =====================================================================
+  // Startup notices — a tiny sequential modal queue, shown once per load.
+  // Two independent checks feed into it:
+  //   1. Browser compatibility (Chromium-based browsers only; the sim
+  //      leans on Chromium-specific behavior for gamepad vendor/product
+  //      parsing and the Keyboard Lock API).
+  //   2. A one-time explainer that Ctrl is disabled outside fullscreen —
+  //      dismissible permanently via localStorage, since this is a real
+  //      standalone page (not an embedded Claude artifact), so plain
+  //      localStorage is the right, durable place for that preference.
+  // =====================================================================
+  (function(){
+    const overlay = document.getElementById('startup-modal-overlay');
+    const textEl = document.getElementById('startup-modal-text');
+    const checkboxWrap = document.getElementById('startup-modal-checkbox-wrap');
+    const checkbox = document.getElementById('startup-modal-checkbox');
+    const okBtn = document.getElementById('startup-modal-ok');
+    const queue = [];
+
+    function showNext(){
+      if (!queue.length) { overlay.style.display = 'none'; return; }
+      const notice = queue[0];
+      textEl.innerHTML = notice.html;
+      checkboxWrap.style.display = notice.persistKey ? 'flex' : 'none';
+      checkbox.checked = false;
+      overlay.style.display = 'flex';
+    }
+
+    okBtn.addEventListener('click', () => {
+      const notice = queue.shift();
+      if (notice && notice.persistKey && checkbox.checked) {
+        try { localStorage.setItem(notice.persistKey, '1'); }
+        catch (err) { /* localStorage can be unavailable (e.g. private browsing) — non-fatal */ }
+      }
+      showNext();
+    });
+
+    // ---- 1. Browser compatibility ----
+    // navigator.userAgentData (User-Agent Client Hints) is currently only
+    // implemented by Chromium-based browsers — Firefox and Safari don't have
+    // it — so its presence plus a "Chromium" brand entry is a solid signal.
+    // Brave and Edge both report a "Chromium" brand alongside their own, by
+    // design, so this covers Chrome/Edge/Brave/Opera without singling any
+    // one of them out. Falls back to UA sniffing for older Chromium.
+    function isChromiumBased(){
+      if (navigator.userAgentData && Array.isArray(navigator.userAgentData.brands)) {
+        return navigator.userAgentData.brands.some(b => /Chromium/i.test(b.brand));
+      }
+      const ua = navigator.userAgent;
+      const looksChromeFamily = /Chrome|Chromium|Edg|OPR|Brave/i.test(ua);
+      const isFirefox = /Firefox/i.test(ua);
+      const isSafariOnly = /Safari/i.test(ua) && !/Chrome|Chromium|Edg/i.test(ua);
+      return looksChromeFamily && !isFirefox && !isSafariOnly;
+    }
+
+    if (!isChromiumBased()) {
+      queue.push({
+        html: '⚠ <b>Unsupported browser detected.</b><br><br>' +
+          'This sim relies on Chromium-specific behavior (gamepad vendor/product ' +
+          'detection, the Keyboard Lock API) and is only tested in ' +
+          '<b>Chrome, Edge, and Brave</b>. It may not work correctly here — for the ' +
+          'full experience, please switch to one of those.',
+        persistKey: null
+      });
+    }
+
+    // ---- 2. Ctrl-disabled-outside-fullscreen notice ----
+    let hideCtrlNotice = false;
+    try { hideCtrlNotice = localStorage.getItem('vector_hide_ctrl_notice') === '1'; }
+    catch (err) { /* localStorage unavailable — just show the notice every time */ }
+
+    if (!hideCtrlNotice) {
+      queue.push({
+        html: 'Your <b>Ctrl</b> key is disabled by default outside fullscreen.<br><br>' +
+          'This prevents accidentally triggering <b>Ctrl+W</b> (close tab) or ' +
+          '<b>Ctrl+Q</b> (quit) — shortcuts no webpage can block. Enter fullscreen ' +
+          '(the ⛶ hint near the controls list) to re-enable Ctrl for its bound action.',
+        persistKey: 'vector_hide_ctrl_notice'
+      });
+    }
+
+    showNext();
+  })();
+
+  // =====================================================================
+  // ControlsModule — standalone unit for keybind management.
+  // Self-contained: only touches `keys` (the live key-state map) via its
+  // public API. Could be lifted into its own controls-module.js file with
+  // no changes if this project ever splits into multiple files.
+  //
+  // Responsibilities:
+  //   1. Hold the current key bindings (KEYBINDS) and answer "is this
+  //      sim action currently active?" for the physics step to consult.
+  //   2. Parse a Star Citizen actionmaps.xml export and translate any
+  //      keyboard (kb1_) rebinds it finds into sim bindings.
+  //   3. Save/load named keybind presets (via the artifact storage API
+  //      when available, otherwise via file export/import).
+  //
+  // Caveat on XML import: Star Citizen only writes REBOUND actions into
+  // actionmaps.xml, not defaults — so a file where the player never
+  // touched keyboard flight controls may have nothing to import for some
+  // actions. The action-name-to-sim-control table below is also a
+  // best-effort mapping based on commonly known SC action identifiers;
+  // it isn't guaranteed to match every game version. Anything not found
+  // is reported plainly rather than silently guessed at.
+  // =====================================================================
+  const ControlsModule = (function(){
+    const keys = {}; // live key-state map, exclusively owned by this module
+
+    function defaultBindings(){
+      return {
+        pitchUp:        [['ArrowUp']],
+        pitchDown:      [['ArrowDown']],
+        yawLeft:        [['ArrowLeft']],
+        yawRight:       [['ArrowRight']],
+        rollLeft:       [['KeyQ']],
+        rollRight:      [['KeyE']],
+        strafeForward:  [['KeyW']],
+        strafeBack:     [['KeyS']],
+        strafeLeft:     [['KeyA']],
+        strafeRight:    [['KeyD']],
+        strafeUp:       [['Space'], ['KeyR']],
+        strafeDown:     [['ControlLeft'], ['KeyF']],
+        decoupleToggle: [['KeyC']],
+        spaceBrake:     [['KeyX']]
+      };
+    }
+
+    let KEYBINDS = defaultBindings();
+
+    // Human-readable labels for the UI
+    const ACTION_LABELS = {
+      pitchUp: 'Pitch up', pitchDown: 'Pitch down',
+      yawLeft: 'Yaw left', yawRight: 'Yaw right',
+      rollLeft: 'Roll left', rollRight: 'Roll right',
+      strafeForward: 'Strafe forward', strafeBack: 'Strafe back',
+      strafeLeft: 'Strafe left', strafeRight: 'Strafe right',
+      strafeUp: 'Strafe up', strafeDown: 'Strafe down',
+      decoupleToggle: 'Decouple toggle', spaceBrake: 'Space brake'
+    };
+
+    // Best-effort mapping from our sim actions to real SC action identifiers.
+    // Ordered lists — first one found in the uploaded file wins.
+    const ACTION_NAME_CANDIDATES = {
+      pitchUp:        ['v_pitch_up'],
+      pitchDown:      ['v_pitch_down'],
+      yawLeft:        ['v_yaw_left'],
+      yawRight:       ['v_yaw_right'],
+      rollLeft:       ['v_roll_left'],
+      rollRight:      ['v_roll_right'],
+      strafeForward:  ['v_strafe_forward', 'v_throttle_up'],
+      strafeBack:     ['v_strafe_back', 'v_throttle_down'],
+      strafeLeft:     ['v_strafe_left'],
+      strafeRight:    ['v_strafe_right'],
+      strafeUp:       ['v_strafe_up'],
+      strafeDown:     ['v_strafe_down'],
+      decoupleToggle: ['v_ifcs_vector_decoupling_toggle'],
+      spaceBrake:     ['v_space_brake']
+    };
+
+    const TOKEN_TO_CODE = {
+      lshift: 'ShiftLeft', rshift: 'ShiftRight',
+      lctrl: 'ControlLeft', rctrl: 'ControlRight',
+      lalt: 'AltLeft', ralt: 'AltRight',
+      space: 'Space',
+      up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight',
+      equals: 'Equal', minus: 'Minus',
+      period: 'Period', comma: 'Comma',
+      backslash: 'Backslash', slash: 'Slash',
+      lbracket: 'BracketLeft', rbracket: 'BracketRight',
+      semicolon: 'Semicolon', apostrophe: 'Quote',
+      tab: 'Tab', capslock: 'CapsLock', backspace: 'Backspace',
+      enter: 'Enter', escape: 'Escape', grave: 'Backquote'
+    };
+
+    function tokenToCode(tok){
+      if (!tok) return null;
+      tok = tok.trim().toLowerCase();
+      if (!tok) return null;
+      if (TOKEN_TO_CODE[tok]) return TOKEN_TO_CODE[tok];
+      if (/^[a-z]$/.test(tok)) return 'Key' + tok.toUpperCase();
+      if (/^[0-9]$/.test(tok)) return 'Digit' + tok;
+      const fMatch = tok.match(/^f([1-9]|1[0-9]|2[0-4])$/);
+      if (fMatch) return 'F' + fMatch[1];
+      return null; // mouse buttons / unsupported tokens — not usable as a keyboard chord
+    }
+
+    function inputStringToChord(inputStr){
+      // e.g. "kb1_lshift+right" -> ['ShiftLeft','ArrowRight']
+      const parts = inputStr.replace(/^kb1_/, '').split('+');
+      const codes = parts.map(tokenToCode);
+      if (codes.some(c => !c)) return null; // unsupported token in this chord — skip it
+      return codes;
+    }
+
+    function parseActionMapsXML(xmlText){
+      const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+      const perr = doc.querySelector('parsererror');
+      if (perr) throw new Error('Could not parse XML file.');
+      const actionsRaw = {}; // scActionName -> array of raw "kb1_..." input strings
+      doc.querySelectorAll('actionmap > action').forEach(actionEl => {
+        const name = actionEl.getAttribute('name');
+        if (!name) return;
+        const kbInputs = Array.from(actionEl.querySelectorAll('rebind'))
+          .map(r => r.getAttribute('input'))
+          .filter(s => s && s.startsWith('kb1_'));
+        if (kbInputs.length) {
+          actionsRaw[name] = (actionsRaw[name] || []).concat(kbInputs);
+        }
+      });
+      return { actionsRaw };
+    }
+
+    // Extracts the joystick devices SC knows about from <options type="joystick" .../>.
+    // The Product attribute looks like " VKBsim Gladiator EVO L    {0201231D-0000-0000-0000-504944564944}".
+    // That GUID is Windows' DirectInput device-instance GUID: the first 8 hex digits are
+    // ProductID+VendorID back to back (both as 4-hex little bits), and the trailing
+    // "504944564944" is literally the ASCII bytes for "PIDVID" — a fixed DirectInput suffix,
+    // not device-specific. We split the first 8 chars in half to recover PID and VID.
+    function parseJoystickDevices(xmlText){
+      const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+      const perr = doc.querySelector('parsererror');
+      if (perr) throw new Error('Could not parse XML file.');
+      const devices = [];
+      doc.querySelectorAll('options[type="joystick"]').forEach(el => {
+        const instance = el.getAttribute('instance');
+        const product = (el.getAttribute('Product') || '').trim();
+        if (!product) return; // empty slot, e.g. instance="3" with no Product attribute at all
+        const m = product.match(/^(.*?)\s*\{([0-9A-Fa-f]{8})-0000-0000-0000-504944564944\}$/);
+        if (!m) { devices.push({ instance, name: product, guid: null, vid: null, pid: null }); return; }
+        const name = m[1].trim();
+        const hex8 = m[2].toUpperCase();
+        const pid = hex8.slice(0, 4);
+        const vid = hex8.slice(4, 8);
+        devices.push({ instance, name, guid: m[2], vid, pid });
+      });
+      return devices;
+    }
+
+    // Extracts joystick AXIS bindings (as opposed to keyboard chords) for the handful
+    // of sim concepts that can plausibly be analog: strafe lateral/vertical/longitudinal,
+    // plus pitch/yaw/roll in case a future profile binds those to a stick too. Real SC
+    // axis tokens look like "js1_x", "js2_rotz" etc — a blank placeholder like "js1_ "
+    // (no letter) means the action exists but was never actually bound, and won't match.
+    const AXIS_TOKEN_RE = /^js(\d+)_(x|y|z|rotx|roty|rotz|slider1|slider2)$/i;
+    const AXIS_ACTION_CANDIDATES = {
+      strafeLateral:      ['v_strafe_lateral'],
+      strafeVertical:     ['v_strafe_vertical'],
+      strafeLongitudinal: ['v_strafe_longitudinal'],
+      pitch:              ['v_pitch'],
+      yaw:                ['v_yaw'],
+      roll:               ['v_roll']
+    };
+
+    function parseJoystickAxisBindings(xmlText){
+      const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+      const perr = doc.querySelector('parsererror');
+      if (perr) throw new Error('Could not parse XML file.');
+      const axisRaw = {}; // scActionName -> [{instance, axis}, ...]
+      doc.querySelectorAll('actionmap > action').forEach(actionEl => {
+        const name = actionEl.getAttribute('name');
+        if (!name) return;
+        Array.from(actionEl.querySelectorAll('rebind')).forEach(r => {
+          const input = (r.getAttribute('input') || '').trim();
+          const m = input.match(AXIS_TOKEN_RE);
+          if (m) (axisRaw[name] = axisRaw[name] || []).push({ instance: m[1], axis: m[2].toLowerCase() });
+        });
+      });
+      return axisRaw;
+    }
+
+    function buildAxisMap(axisRaw){
+      const map = {}; // concept -> {instance, axis, scName}
+      for (const concept of Object.keys(AXIS_ACTION_CANDIDATES)) {
+        for (const cand of AXIS_ACTION_CANDIDATES[concept]) {
+          if (axisRaw[cand] && axisRaw[cand].length) {
+            map[concept] = { instance: axisRaw[cand][0].instance, axis: axisRaw[cand][0].axis, scName: cand };
+            break;
+          }
+        }
+      }
+      return map;
+    }
+
+    function buildOverridesFromParsed(parsed){
+      // Automatically matches file actions to sim actions via the best-effort
+      // name table above. Returns what matched (and will be applied) plus
+      // what wasn't found, so the import result is transparent even though
+      // it's applied automatically.
+      const overrides = {}, matched = [], notFound = [];
+      for (const simAction of Object.keys(ACTION_NAME_CANDIDATES)) {
+        const candidates = ACTION_NAME_CANDIDATES[simAction];
+        let scName = null, rawInputs = null;
+        for (const cand of candidates) {
+          if (parsed.actionsRaw[cand]) { scName = cand; rawInputs = parsed.actionsRaw[cand]; break; }
+        }
+        if (rawInputs) {
+          const chords = rawInputs.map(inputStringToChord).filter(Boolean);
+          if (chords.length) {
+            overrides[simAction] = chords;
+            matched.push({ simAction, scName, chords });
+            continue;
+          }
+        }
+        notFound.push({ simAction, candidates });
+      }
+      return { overrides, matched, notFound };
+    }
+
+    function applyOverrides(overrides){
+      for (const [action, chords] of Object.entries(overrides)) {
+        KEYBINDS[action] = chords;
+      }
+    }
+
+    function setBinding(simAction, chords){
+      KEYBINDS[simAction] = chords;
+    }
+
+    function resetToDefault(){ KEYBINDS = defaultBindings(); }
+
+    function isActive(action){
+      const chords = KEYBINDS[action];
+      if (!chords) return false;
+      return chords.some(chord => chord.every(code => !!keys[code]));
+    }
+
+    function chordJustPressed(action, justPressedCode){
+      const chords = KEYBINDS[action];
+      if (!chords) return false;
+      return chords.some(chord => chord.includes(justPressedCode) && chord.every(code => !!keys[code]));
+    }
+
+    function codeToLabel(code){
+      if (code.startsWith('Key')) return code.slice(3);
+      if (code.startsWith('Digit')) return code.slice(5);
+      if (code.startsWith('Arrow')) return '↑↓←→'.includes(code) ? code : code.slice(5);
+      return { ShiftLeft:'Shift', ShiftRight:'RShift', ControlLeft:'Ctrl', ControlRight:'RCtrl',
+        AltLeft:'Alt', AltRight:'RAlt', Space:'Space' }[code] || code;
+    }
+    function chordToLabel(chord){ return chord.map(codeToLabel).join('+'); }
+
+    // ---- Persistence: artifact storage when available, file export/import otherwise ----
+    const hasArtifactStorage = typeof window.storage === 'object' && window.storage !== null;
+    const PRESET_PREFIX = 'control-preset:';
+
+    async function savePreset(name){
+      if (!hasArtifactStorage) throw new Error('no-storage');
+      await window.storage.set(PRESET_PREFIX + name, JSON.stringify(KEYBINDS), false);
+    }
+    async function loadPreset(name){
+      if (!hasArtifactStorage) throw new Error('no-storage');
+      const res = await window.storage.get(PRESET_PREFIX + name, false);
+      if (!res) throw new Error('Preset not found.');
+      KEYBINDS = JSON.parse(res.value);
+    }
+    async function deletePreset(name){
+      if (!hasArtifactStorage) throw new Error('no-storage');
+      await window.storage.delete(PRESET_PREFIX + name, false);
+    }
+    async function listPresets(){
+      if (!hasArtifactStorage) throw new Error('no-storage');
+      const res = await window.storage.list(PRESET_PREFIX, false);
+      return (res && res.keys ? res.keys : []).map(k => k.slice(PRESET_PREFIX.length));
+    }
+
+    function exportToFile(name){
+      const blob = new Blob([JSON.stringify(KEYBINDS, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = (name || 'control-preset') + '.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    function importFromFileText(text){
+      const parsed = JSON.parse(text);
+      KEYBINDS = parsed;
+    }
+
+    return {
+      keys, // live key-state map for the game loop to read/write
+      isActive, chordJustPressed,
+      parseActionMapsXML, parseJoystickDevices, parseJoystickAxisBindings, buildAxisMap,
+      buildOverridesFromParsed, applyOverrides, setBinding, resetToDefault,
+      getBindings: () => KEYBINDS,
+      getActionLabels: () => ACTION_LABELS,
+      chordToLabel,
+      hasArtifactStorage,
+      savePreset, loadPreset, deletePreset, listPresets,
+      exportToFile, importFromFileText
+    };
+  })();
+  const keys = ControlsModule.keys;
+
+  // =====================================================================
+  // GamepadModule — thin wrapper around the browser's Gamepad API, used
+  // only for device DETECTION right now (matching physical sticks against
+  // an imported actionmaps.xml by USB vendor/product ID). It does not yet
+  // feed any axis/button data into flight control — that's a follow-up
+  // once we've confirmed the browser can see the same hardware SC does.
+  //
+  // Caveats worth knowing:
+  //  - Chrome/Edge only reveal a gamepad to the page after it receives
+  //    input from that device (a privacy protection) — a stick plugged in
+  //    but untouched won't appear in navigator.getGamepads() yet.
+  //  - The Gamepad API's `id` string is not standardized. On Chromium,
+  //    non-XInput devices (which flight sticks/pedals are) typically come
+  //    through as "<name> (Vendor: xxxx Product: yyyy)" with raw USB hex
+  //    IDs — that's what we regex out below. Firefox's format can differ.
+  //  - navigator.getGamepads() must be polled; there's no reliable
+  //    per-frame change event, so we poll on an interval instead.
+  // =====================================================================
+  const GamepadModule = (function(){
+    let snapshot = [];
+    const VID_PID_RE = /Vendor:\s*([0-9a-fA-F]{2,4}).*?Product:\s*([0-9a-fA-F]{2,4})/i;
+
+    function poll(){
+      const supported = !!(navigator.getGamepads);
+      if (!supported) { snapshot = []; return; }
+      const pads = navigator.getGamepads();
+      snapshot = Array.from(pads).filter(Boolean).map(p => {
+        const m = p.id.match(VID_PID_RE);
+        return {
+          index: p.index,
+          id: p.id,
+          axesValues: Array.from(p.axes),
+          buttonsPressed: Array.from(p.buttons).map(b => b.pressed || b.value > 0.5),
+          vid: m ? m[1].padStart(4, '0').toUpperCase() : null,
+          pid: m ? m[2].padStart(4, '0').toUpperCase() : null
+        };
+      });
+    }
+
+    function findByVidPid(vid, pid){
+      return snapshot.find(p => p.vid === vid && p.pid === pid) || null;
+    }
+
+    return {
+      isSupported: () => !!navigator.getGamepads,
+      poll,
+      getSnapshot: () => snapshot,
+      findByVidPid
+    };
+  })();
+
+  let scDevices = []; // devices parsed from the user's actionmaps.xml, shared between the panel UI and JoystickAxes below
+  let axisMap = {};   // concept -> {instance, axis, scName}, also from actionmaps.xml
+
+  // =====================================================================
+  // JoystickAxes — resolves the parsed actionmaps.xml axis bindings against
+  // whatever the browser currently sees, and returns live analog values.
+  //
+  // Known unknown: which array index in gamepad.axes corresponds to which
+  // physical axis (X, Y, twist/Z, etc.) is NOT guaranteed by any spec — it
+  // depends on the device's HID descriptor and OS driver. The mapping below
+  // is a reasonable default guess (the common DirectInput ordering), but
+  // should be confirmed empirically using the live axis readout in the
+  // detection panel: wiggle one axis at a time and see which [index] moves.
+  // If it's wrong for your hardware, this is the one table to fix.
+  // =====================================================================
+  const JoystickAxes = (function(){
+    const DEADZONE = 0.08;
+    const AXIS_INDEX = { x: 0, y: 1, z: 2, rotx: 3, roty: 4, rotz: 5, slider1: 6, slider2: 7 };
+    const invert = { strafeLateral: false, strafeVertical: true, strafeLongitudinal: false, pitch: false, yaw: false, roll: false };
+
+    function readAxisFor(concept){
+      const binding = axisMap[concept];
+      if (!binding) return null; // not bound to any joystick
+
+      let vid, pid, idx;
+      if (binding.manual) {
+        // manually captured via live axis-wiggle detection — exact vid/pid/index,
+        // no letter-to-index guessing involved (see completeAxisRebind)
+        vid = binding.vid; pid = binding.pid; idx = binding.axisIndex;
+      } else {
+        // resolved from an imported actionmaps.xml: instance -> device -> best-effort
+        // letter-to-index guess (AXIS_INDEX below)
+        const dev = scDevices.find(d => d.instance === binding.instance);
+        if (!dev || !dev.vid) return null;
+        vid = dev.vid; pid = dev.pid;
+        idx = AXIS_INDEX[binding.axis];
+      }
+
+      const pad = GamepadModule.findByVidPid(vid, pid);
+      if (!pad) return null; // device known, but not currently seen by the browser
+      if (idx === undefined || idx >= pad.axesValues.length) return null;
+      let v = pad.axesValues[idx];
+      if (Math.abs(v) < DEADZONE) v = 0;
+      if (invert[concept]) v = -v;
+      return v;
+    }
+
+    function read(){
+      return {
+        lateral: readAxisFor('strafeLateral'),
+        vertical: readAxisFor('strafeVertical'),
+        longitudinal: readAxisFor('strafeLongitudinal'),
+        pitch: readAxisFor('pitch'),
+        yaw: readAxisFor('yaw'),
+        roll: readAxisFor('roll')
+      };
+    }
+
+    return {
+      read,
+      setInvert: (concept, val) => { invert[concept] = val; },
+      getInvert: () => invert
+    };
+  })();
+
+  let buttonMap = {}; // digital sim action -> {vid, pid, buttonIndex, label} — joystick button bindings, manual-capture only (SC's actionmaps.xml button tokens aren't parsed; only decoupleToggle/spaceBrake support this)
+
+  // =====================================================================
+  // JoystickButtons — two read modes for a bound joystick button: `justPressed`
+  // edge-detects it the same way keyboard presses are (chordJustPressed), for
+  // real toggle actions like decoupleToggle; `isPressed` is a plain hold check,
+  // for actions like spaceBrake that should only be active while held down.
+  // =====================================================================
+  const JoystickButtons = (function(){
+    const prevPressed = {}; // action -> bool, last frame's state (for justPressed only)
+
+    function currentlyPressed(action){
+      const binding = buttonMap[action];
+      if (!binding) return false;
+      const pad = GamepadModule.findByVidPid(binding.vid, binding.pid);
+      if (!pad || binding.buttonIndex >= pad.buttonsPressed.length) return false;
+      return pad.buttonsPressed[binding.buttonIndex];
+    }
+
+    function justPressed(action){
+      const pressed = currentlyPressed(action);
+      const wasPressed = !!prevPressed[action];
+      prevPressed[action] = pressed;
+      return pressed && !wasPressed;
+    }
+
+    return { justPressed, isPressed: currentlyPressed };
+  })();
+
+  // =====================================================================
+  // MouseLook — standalone module wrapping the Pointer Lock API.
+  // Models Star Citizen's default ABSOLUTE mouse-flight mode: the mouse
+  // acts like a virtual joystick that stays deflected once moved, driving
+  // a continuous pitch/yaw rate until you move it back toward center —
+  // it does NOT reset every frame like FPS-style relative look.
+  // Release (Escape / alt-tab) is handled by the browser's own pointer
+  // lock lifecycle; we just react to it via 'pointerlockchange'.
+  // =====================================================================
+  const MouseLook = (function(){
+    let captured = false;
+    let offsetX = 0, offsetY = 0; // persistent virtual-stick deflection, in pixels
+    const MAX_OFFSET = 220; // pixels of mouse travel for full deflection
+    let sensitivity = 1.5; // multiplier applied on top of the offset ratio
+    let invertY = true;
+    const listeners = [];
+
+    function notify(){ listeners.forEach(fn => fn(captured)); }
+
+    document.addEventListener('pointerlockchange', () => {
+      captured = document.pointerLockElement === canvas;
+      offsetX = 0; offsetY = 0; // recenter whenever capture state changes
+      notify();
+    });
+    document.addEventListener('pointerlockerror', () => {
+      captured = false;
+      notify();
+    });
+    document.addEventListener('mousemove', e => {
+      if (!captured) return;
+      offsetX = Math.max(-MAX_OFFSET, Math.min(MAX_OFFSET, offsetX + (e.movementX || 0)));
+      offsetY = Math.max(-MAX_OFFSET, Math.min(MAX_OFFSET, offsetY + (e.movementY || 0)));
+    });
+    // belt-and-suspenders: explicitly release on losing focus, in case a
+    // browser doesn't auto-exit pointer lock on alt-tab
+    window.addEventListener('blur', () => {
+      try { if (document.pointerLockElement) document.exitPointerLock(); }
+      catch (err) { /* ignore */ }
+    });
+
+    function requestCapture(){
+      try { canvas.requestPointerLock(); }
+      catch (err) { console.warn('Pointer lock unavailable in this context:', err); }
+    }
+    function releaseCapture(){
+      try { if (document.pointerLockElement) document.exitPointerLock(); }
+      catch (err) { /* ignore */ }
+    }
+    function recenter(){ offsetX = 0; offsetY = 0; }
+
+    function consume(){
+      // reads the CURRENT stick deflection — does not reset it, since the
+      // deflection should keep driving rotation until manually recentered
+      const yaw = Math.max(-1, Math.min(1, (offsetX / MAX_OFFSET) * sensitivity));
+      let pitch = Math.max(-1, Math.min(1, (offsetY / MAX_OFFSET) * sensitivity));
+      if (invertY) pitch = -pitch;
+      return { pitch, yaw };
+    }
+
+    return {
+      requestCapture, releaseCapture, consume, recenter,
+      isCaptured: () => captured,
+      getOffset: () => ({ x: offsetX, y: offsetY, max: MAX_OFFSET }),
+      onChange: fn => listeners.push(fn),
+      getSensitivity: () => sensitivity, setSensitivity: v => { sensitivity = v; },
+      getInvertY: () => invertY, setInvertY: v => { invertY = v; }
+    };
+  })();
+
+  // ---------- Ship archetypes (rough approximations, not exact SC data) ----------
+  const SHIP_TYPES = [
+    {
+      // Gladius — derived from real SCM data: 226 m/s SCM speed, 68/52/200 deg/s pitch/yaw/roll.
+      // Retro/strafe/vertical thrust are approximated (not provided); boost speeds (520/268) not yet modeled.
+      name: 'Gladius',
+      mass: 1.5,
+      linearThrust: { main: 203, retro: 142, strafe: 120, vertical: 120 },
+      angularThrust: { pitch: 1.56, yaw: 1.24, roll: 4.31 },
+      linearDrag: 0.6,
+      angularDrag: 2.6,
+      maxAngVel: { pitch: 1.19, yaw: 0.91, roll: 3.49 },
+      scmSpeed: 226
+    }
+  ];
+
+  let shipTypeIndex = 0; // Gladius is the only ship — kept as an index for makeShip/resetShip, not for switching
+
+  // ---------- Ship state (in a simple 3D world, rendered with basic projection) ----------
+  function makeShip(type){
+    return {
+      type,
+      pos: { x: 0, y: 0, z: 0 },
+      vel: { x: 0, y: 0, z: 0 },
+      // orientation as a quaternion — keeps pitch/yaw/roll relative to the ship's
+      // CURRENT body axes, so rotation always feels consistent regardless of roll
+      quat: { x: 0, y: 0, z: 0, w: 1 },
+      angVel: { pitch: 0, yaw: 0, roll: 0 },
+      throttle: 0, // -1..1, main/retro thrust intent
+      decoupled: false,
+      spaceBrakeOn: false,
+      exploding: false,
+      explosionTimer: 0
+    };
+  }
+
+  // ---------- Static collidable object — a simple station to practice flying around and avoiding ----------
+  const STATION = { pos: { x: 0, y: 0, z: 400 }, halfSize: 25, collisionRadius: 32 };
+  const SPAWN = { pos: { x: 0, y: 0, z: 0 }, quat: { x: 0, y: 0, z: 0, w: 1 } };
+
+  // ---------- Weapons — traveling projectiles, visuals only for now (no hit detection yet) ----------
+  const WEAPON = {
+    muzzleSpeed: 1400,   // m/s, added on top of the ship's own velocity (matches SC-style ballistics)
+    fireRate: 10,        // rounds per second while the trigger is held
+    lifetime: 2.5,       // seconds before a round despawns
+    muzzleForward: 3,    // spawn offset ahead of the camera so tracers don't clip through it
+    muzzleRight: 1.1,    // alternating left/right muzzle offset, purely visual (twin-gun look)
+    muzzleDown: 0.6
+  };
+  let firing = false;
+  let fireCooldown = 0;
+  let muzzleAlternate = 1; // flips between -1/1 each shot
+  const projectiles = [];
+
+  function spawnProjectile(forward, right, up){
+    const mx = right.x * (muzzleAlternate * WEAPON.muzzleRight) - up.x * WEAPON.muzzleDown + forward.x * WEAPON.muzzleForward;
+    const my = right.y * (muzzleAlternate * WEAPON.muzzleRight) - up.y * WEAPON.muzzleDown + forward.y * WEAPON.muzzleForward;
+    const mz = right.z * (muzzleAlternate * WEAPON.muzzleRight) - up.z * WEAPON.muzzleDown + forward.z * WEAPON.muzzleForward;
+    projectiles.push({
+      pos: { x: ship.pos.x + mx, y: ship.pos.y + my, z: ship.pos.z + mz },
+      vel: {
+        x: ship.vel.x + forward.x * WEAPON.muzzleSpeed,
+        y: ship.vel.y + forward.y * WEAPON.muzzleSpeed,
+        z: ship.vel.z + forward.z * WEAPON.muzzleSpeed
+      },
+      age: 0
+    });
+    muzzleAlternate *= -1;
+  }
+
+  function updateProjectiles(dt){
+    if (firing && fireCooldown <= 0) {
+      const { forward, right, up } = computeAxes(ship.quat);
+      spawnProjectile(forward, right, up);
+      fireCooldown = 1 / WEAPON.fireRate;
+    }
+    fireCooldown -= dt;
+
+    for (let i = projectiles.length - 1; i >= 0; i--){
+      const pr = projectiles[i];
+      pr.pos.x += pr.vel.x * dt;
+      pr.pos.y += pr.vel.y * dt;
+      pr.pos.z += pr.vel.z * dt;
+      pr.age += dt;
+      if (pr.age > WEAPON.lifetime) projectiles.splice(i, 1);
+    }
+  }
+
+  function resetShip(){
+    ship.pos = { x: SPAWN.pos.x, y: SPAWN.pos.y, z: SPAWN.pos.z };
+    ship.vel = { x: 0, y: 0, z: 0 };
+    ship.quat = { x: SPAWN.quat.x, y: SPAWN.quat.y, z: SPAWN.quat.z, w: SPAWN.quat.w };
+    ship.angVel = { pitch: 0, yaw: 0, roll: 0 };
+    ship.throttle = 0;
+    ship.spaceBrakeOn = false;
+    ship.exploding = false;
+    ship.explosionTimer = 0;
+    projectiles.length = 0;
+  }
+
+  let ship = makeShip(SHIP_TYPES[shipTypeIndex]);
+
+  // ---------- Input ----------
+  let ctrlFlashTimeout = null;
+  function flashCtrlDisabledWarning(){
+    const el = document.getElementById('ctrl-flash-warning');
+    el.style.opacity = '1';
+    if (ctrlFlashTimeout) clearTimeout(ctrlFlashTimeout);
+    ctrlFlashTimeout = setTimeout(() => { el.style.opacity = '0'; }, 700);
+  }
+
+  window.addEventListener('keydown', e => {
+    const isCtrlCode = e.code === 'ControlLeft' || e.code === 'ControlRight';
+    const inFullscreen = !!document.fullscreenElement;
+
+    // Ctrl is disabled outside fullscreen — see the startup notice. Browsers won't let
+    // any page block Ctrl+W (close tab) or Ctrl+Q (quit), so the only real protection
+    // is to not let Ctrl register as game input until fullscreen (+ Keyboard Lock,
+    // where supported) is actually engaged.
+    if (isCtrlCode && !inFullscreen) {
+      e.preventDefault();
+      if (!e.repeat) flashCtrlDisabledWarning();
+      return;
+    }
+
+    // Outside fullscreen Ctrl isn't bound to any game action, so a Ctrl/Cmd-held combo
+    // (Ctrl+C, Ctrl+V, Ctrl+A, etc.) is standard browser behavior, not game input —
+    // leave it completely alone rather than letting the gameCodes preventDefault below
+    // swallow it. In fullscreen, Ctrl IS a bound game key (strafeDown default), so
+    // Ctrl+W-style combos must keep working as game input there — don't skip.
+    if ((e.ctrlKey || e.metaKey) && !isCtrlCode && !inFullscreen) return;
+
+    keys[e.code] = true;
+    if (!e.repeat && ControlsModule.chordJustPressed('decoupleToggle', e.code)) {
+      ship.decoupled = !ship.decoupled;
+    }
+    // space brake is hold-to-brake (see step()), not a toggle — nothing to do here
+
+    // Prevent the browser's own default action for our game keys (page scroll, etc.)
+    // — but note this can NOT block certain reserved combos like Ctrl+W/T/N/Q, which
+    // browsers deliberately don't let any page override. That's why Ctrl isn't a
+    // default binding here: holding it alongside another game key risks triggering
+    // one of those unblockable shortcuts (e.g. Ctrl+W closes the tab).
+    const target = e.target;
+    const isEditable = target && (target.tagName === 'INPUT' || target.tagName === 'SELECT' ||
+      target.tagName === 'TEXTAREA' || target.isContentEditable);
+    const gameCodes = ['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE','KeyR','KeyF','KeyC','KeyX','KeyV',
+      'Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'];
+    if (!isEditable && gameCodes.includes(e.code)) e.preventDefault();
+  });
+  window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+  // ---------- Touch controls (minimal, testing only) ----------
+  const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  if (isTouch) {
+    document.body.classList.add('touch');
+
+    const joyZone = document.getElementById('joy-zone');
+    const joyStick = document.getElementById('joy-stick');
+    let joyActive = false, joyId = null, joyCenter = { x: 0, y: 0 };
+    const joyRadius = 65;
+
+    function joyStart(e){
+      const t = e.changedTouches[0];
+      joyId = t.identifier;
+      const rect = joyZone.getBoundingClientRect();
+      joyCenter = { x: rect.left + rect.width/2, y: rect.top + rect.height/2 };
+      joyActive = true;
+      e.preventDefault();
+    }
+    function joyMove(e){
+      if (!joyActive) return;
+      for (const t of e.changedTouches){
+        if (t.identifier !== joyId) continue;
+        let dx = t.clientX - joyCenter.x;
+        let dy = t.clientY - joyCenter.y;
+        const dist = Math.min(joyRadius, Math.hypot(dx, dy));
+        const angle = Math.atan2(dy, dx);
+        dx = Math.cos(angle) * dist; dy = Math.sin(angle) * dist;
+        joyStick.style.left = (45 + dx) + 'px';
+        joyStick.style.top = (45 + dy) + 'px';
+        const nx = dx / joyRadius, ny = dy / joyRadius; // -1..1
+        // map joystick to pitch/yaw arrow keys (deadzone 0.15) — up = dive, down = climb
+        keys['ArrowUp'] = ny < -0.15;
+        keys['ArrowDown'] = ny > 0.15;
+        keys['ArrowLeft'] = nx < -0.15;
+        keys['ArrowRight'] = nx > 0.15;
+        e.preventDefault();
+      }
+    }
+    function joyEnd(e){
+      for (const t of e.changedTouches){
+        if (t.identifier !== joyId) continue;
+        joyActive = false;
+        joyStick.style.left = '45px';
+        joyStick.style.top = '45px';
+        keys['ArrowUp'] = keys['ArrowDown'] = keys['ArrowLeft'] = keys['ArrowRight'] = false;
+      }
+    }
+    joyZone.addEventListener('touchstart', joyStart);
+    joyZone.addEventListener('touchmove', joyMove);
+    joyZone.addEventListener('touchend', joyEnd);
+    joyZone.addEventListener('touchcancel', joyEnd);
+
+    function bindHold(id, keyCode){
+      const el = document.getElementById(id);
+      el.addEventListener('touchstart', e => { keys[keyCode] = true; e.preventDefault(); });
+      el.addEventListener('touchend', e => { keys[keyCode] = false; e.preventDefault(); });
+      el.addEventListener('touchcancel', e => { keys[keyCode] = false; });
+    }
+    bindHold('tb-fwd', 'KeyW');
+    bindHold('tb-back', 'KeyS');
+    bindHold('tb-up', 'Space');
+    bindHold('tb-down', 'ControlLeft');
+    bindHold('tb-roll-l', 'KeyE');
+    bindHold('tb-roll-r', 'KeyQ');
+    bindHold('tb-stop', 'KeyX'); // space brake is hold-to-brake, not a toggle — same as keyboard
+
+    document.getElementById('tb-decouple').addEventListener('touchstart', e => {
+      ship.decoupled = !ship.decoupled;
+      e.preventDefault();
+    });
+
+    const fireBtn = document.getElementById('tb-fire');
+    fireBtn.addEventListener('touchstart', e => { firing = true; e.preventDefault(); });
+    fireBtn.addEventListener('touchend', e => { firing = false; e.preventDefault(); });
+    fireBtn.addEventListener('touchcancel', e => { firing = false; });
+  }
+
+  // ---------- Fullscreen + Keyboard Lock (protects Ctrl+W/Q where supported) ----------
+  (function(){
+    const hint = document.getElementById('fullscreen-hint');
+    const dangerHint = document.getElementById('ctrl-danger-hint');
+    const keyboardLockSupported = !!(navigator.keyboard && navigator.keyboard.lock);
+
+    async function enterProtectedFullscreen(){
+      try {
+        await document.documentElement.requestFullscreen();
+      } catch (err) {
+        hint.textContent = '⛶ Fullscreen unavailable here (blocked by browser/embed)';
+        return;
+      }
+      if (keyboardLockSupported) {
+        try {
+          await navigator.keyboard.lock(['ControlLeft', 'ControlRight', 'KeyW', 'KeyQ']);
+        } catch (err) {
+          console.warn('Keyboard lock failed:', err);
+        }
+      }
+    }
+
+    document.addEventListener('fullscreenchange', () => {
+      const inFullscreen = !!document.fullscreenElement;
+      if (inFullscreen && keyboardLockSupported) {
+        hint.textContent = '✓ Ctrl+W/Q protected — Esc to exit fullscreen';
+        dangerHint.style.display = 'none';
+      } else if (inFullscreen && !keyboardLockSupported) {
+        hint.textContent = 'Fullscreen on, but this browser has no Keyboard Lock API — still avoid Ctrl+W/Q';
+      } else {
+        hint.textContent = '⛶ Enter fullscreen to protect Ctrl+W/Q (Chrome/Edge only)';
+        dangerHint.style.display = '';
+        if (navigator.keyboard && navigator.keyboard.unlock) {
+          try { navigator.keyboard.unlock(); } catch (err) { /* ignore */ }
+        }
+      }
+    });
+
+    if (!keyboardLockSupported) {
+      hint.textContent = '⛶ Fullscreen available, but Keyboard Lock needs Chrome/Edge — still avoid Ctrl+W/Q';
+    }
+    hint.addEventListener('click', enterProtectedFullscreen);
+  })();
+
+  // ---------- Mouse capture UI ----------
+  (function(){
+    const hint = document.getElementById('mouse-capture-hint');
+    const noMouse = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    if (noMouse) return; // touch devices use the on-screen joystick instead
+
+    hint.addEventListener('click', () => MouseLook.requestCapture());
+    canvas.addEventListener('click', () => {
+      if (!MouseLook.isCaptured()) MouseLook.requestCapture();
+    });
+    MouseLook.onChange(captured => {
+      hint.style.display = captured ? 'none' : 'block';
+      const statusEl = document.getElementById('ctrl-mouse-status');
+      if (statusEl) statusEl.textContent = captured ? 'Captured — Esc or alt-tab to release.' : 'Not captured — click the game view to enable.';
+    });
+
+    // fire weapons — left mouse button, but only once the pointer is already
+    // captured (so the very first click just captures the mouse, as before)
+    canvas.addEventListener('mousedown', e => {
+      if (e.button === 0 && MouseLook.isCaptured()) firing = true;
+    });
+    window.addEventListener('mouseup', e => {
+      if (e.button === 0) firing = false;
+    });
+
+    const sensSlider = document.getElementById('ctrl-mouse-sens');
+    sensSlider.value = MouseLook.getSensitivity();
+    sensSlider.addEventListener('input', e => MouseLook.setSensitivity(parseFloat(e.target.value)));
+
+    const invertCheckbox = document.getElementById('ctrl-mouse-invert');
+    invertCheckbox.checked = MouseLook.getInvertY();
+    invertCheckbox.addEventListener('change', e => MouseLook.setInvertY(e.target.checked));
+
+    document.getElementById('ctrl-mouse-recenter').addEventListener('click', () => MouseLook.recenter());
+    // quick keyboard shortcut to recenter the virtual stick mid-flight without opening the panel
+    window.addEventListener('keydown', e => {
+      if (e.code === 'KeyV' && MouseLook.isCaptured()) MouseLook.recenter();
+    });
+  })();
+
+  // keyboard fallback for firing (works without mouse-look captured, e.g. keyboard-only play)
+  window.addEventListener('keydown', e => { if (e.code === 'ShiftRight') firing = true; });
+  window.addEventListener('keyup', e => { if (e.code === 'ShiftRight') firing = false; });
+
+  // ---------- Controls panel UI ----------
+  (function(){
+    const toggleBtn = document.getElementById('ctrl-toggle');
+    const panel = document.getElementById('ctrl-panel');
+    const bindingsList = document.getElementById('ctrl-bindings-list');
+    const rebindStatus = document.getElementById('ctrl-rebind-status');
+    const presetNameInput = document.getElementById('ctrl-preset-name');
+    const presetSelect = document.getElementById('ctrl-preset-list');
+    const presetStatus = document.getElementById('ctrl-preset-status');
+    const presetFileStatus = document.getElementById('ctrl-preset-file-status');
+    const importStatus = document.getElementById('ctrl-import-status');
+    const importResults = document.getElementById('ctrl-import-results');
+    const scDevicesList = document.getElementById('ctrl-sc-devices-list');
+    const gamepadList = document.getElementById('ctrl-gamepad-list');
+    const gamepadSupportStatus = document.getElementById('ctrl-gamepad-support-status');
+
+    let pendingRebindAction = null;
+
+    function renderAxisMap(){
+      const axisMapEl = document.getElementById('ctrl-axis-map-list');
+      const concepts = Object.keys(axisMap);
+      if (!concepts.length) { axisMapEl.innerHTML = '(no joystick axis bindings found in the loaded file)'; return; }
+      const stick = JoystickAxes.read();
+      const valueFor = { strafeLateral: stick.lateral, strafeVertical: stick.vertical, strafeLongitudinal: stick.longitudinal, pitch: stick.pitch, yaw: stick.yaw, roll: stick.roll };
+      axisMapEl.innerHTML = concepts.map(c => {
+        const b = axisMap[c];
+        const v = valueFor[c];
+        const status = v === null ? 'device not currently detected' : v.toFixed(2);
+        return `<div class="${v === null ? 'ctrl-missing' : 'ctrl-found'}">${c} ← js${b.instance}_${b.axis} (${b.scName}): ${status}</div>`;
+      }).join('');
+    }
+
+    function renderScDevices(){
+      if (!scDevices.length) { scDevicesList.innerHTML = '(load actionmaps.xml above)'; return; }
+      const pads = GamepadModule.getSnapshot();
+      scDevicesList.innerHTML = scDevices.map(d => {
+        if (!d.vid) {
+          return `<div class="ctrl-missing">js${d.instance}: ${d.name} — GUID format not recognized, can't auto-match</div>`;
+        }
+        const hit = pads.find(p => p.vid === d.vid && p.pid === d.pid);
+        return hit
+          ? `<div class="ctrl-found">✓ js${d.instance}: ${d.name} (VID ${d.vid} PID ${d.pid}) — seen as browser gamepad #${hit.index}</div>`
+          : `<div class="ctrl-missing">js${d.instance}: ${d.name} (VID ${d.vid} PID ${d.pid}) — not detected yet</div>`;
+      }).join('');
+    }
+
+    function renderGamepads(){
+      const pads = GamepadModule.getSnapshot();
+      if (!pads.length) {
+        gamepadList.innerHTML = '(none yet — press a button on each device)';
+      } else {
+        gamepadList.innerHTML = pads.map(p => {
+          const axesStr = p.axesValues.map((v, i) => `[${i}]${v.toFixed(2)}`).join(' ');
+          return `<div class="ctrl-found">#${p.index}: ${p.id}<br>&nbsp;&nbsp;axes: ${axesStr}` +
+            (p.vid ? ` — VID ${p.vid} PID ${p.pid}` : '') + `</div>`;
+        }).join('');
+      }
+      renderScDevices(); // cross-reference depends on the current pad snapshot too
+      renderAxisMap();
+    }
+
+    if (!GamepadModule.isSupported()) {
+      gamepadSupportStatus.textContent = 'This browser does not expose the Gamepad API.';
+    } else {
+      // live poll while the panel is open — the browser gives us no reliable
+      // per-device change event, and detection depends on the user actually
+      // moving/pressing each stick, so this needs to keep checking
+      setInterval(() => {
+        if (panel.style.display === 'none') return;
+        GamepadModule.poll();
+        renderGamepads();
+      }, 100);
+    }
+
+    // Maps each digital action to the joystick axis concept it corresponds to (if any),
+    // so the bindings table can show keyboard and joystick side by side per control.
+    // decoupleToggle/spaceBrake have no analog equivalent — those get a joystick BUTTON
+    // binding instead (see BUTTON_BINDABLE_ACTIONS / JoystickButtons below).
+    const ACTION_TO_AXIS_CONCEPT = {
+      pitchUp: 'pitch', pitchDown: 'pitch',
+      yawLeft: 'yaw', yawRight: 'yaw',
+      rollLeft: 'roll', rollRight: 'roll',
+      strafeForward: 'strafeLongitudinal', strafeBack: 'strafeLongitudinal',
+      strafeLeft: 'strafeLateral', strafeRight: 'strafeLateral',
+      strafeUp: 'strafeVertical', strafeDown: 'strafeVertical'
+    };
+    // JoystickAxes.read() uses shorthand keys that differ from the axisMap concept names above
+    const STICK_KEY_FOR_CONCEPT = {
+      pitch: 'pitch', yaw: 'yaw', roll: 'roll',
+      strafeLateral: 'lateral', strafeVertical: 'vertical', strafeLongitudinal: 'longitudinal'
+    };
+    const CONCEPT_LABELS = {
+      pitch: 'Pitch', yaw: 'Yaw', roll: 'Roll',
+      strafeLongitudinal: 'Strafe Forward/Back', strafeLateral: 'Strafe Left/Right', strafeVertical: 'Strafe Up/Down'
+    };
+
+    // =====================================================================
+    // Joystick axis rebind capture. A single physical axis drives BOTH directions
+    // of a concept (e.g. one roll axis covers rollLeft AND rollRight), so unlike
+    // keyboard rebind (one key per action) this listens for whichever axis moves
+    // and binds the whole concept to it — the user doesn't pick a direction.
+    // Detects the exact device + axis array-index live, so unlike XML-imported
+    // axis bindings (which guess the index from a letter — see AXIS_INDEX in
+    // JoystickAxes), a manually-captured binding needs no guessing at all.
+    // =====================================================================
+    let pendingAxisRebindConcept = null;
+    let axisRebindBaseline = null;
+    let axisRebindRAF = null;
+    const AXIS_REBIND_THRESHOLD = 0.4;
+
+    function cancelAxisRebind(){
+      if (axisRebindRAF !== null) cancelAnimationFrame(axisRebindRAF);
+      axisRebindRAF = null;
+      pendingAxisRebindConcept = null;
+      axisRebindBaseline = null;
+    }
+
+    function completeAxisRebind(concept, pad, axisIndex){
+      const niceName = pad.id.split('(')[0].trim();
+      axisMap[concept] = { vid: pad.vid, pid: pad.pid, axisIndex, label: `${niceName} axis[${axisIndex}]`, manual: true };
+      rebindStatus.textContent = `Bound "${niceName}" axis [${axisIndex}] to ${CONCEPT_LABELS[concept] || concept}.`;
+      cancelAxisRebind();
+      renderBindings();
+    }
+
+    function pollAxisRebind(){
+      if (!pendingAxisRebindConcept) return;
+      GamepadModule.poll();
+      const current = GamepadModule.getSnapshot();
+      for (const base of axisRebindBaseline) {
+        const now = current.find(p => p.index === base.index);
+        if (!now) continue;
+        for (let i = 0; i < base.axes.length; i++) {
+          if (Math.abs((now.axesValues[i] || 0) - base.axes[i]) > AXIS_REBIND_THRESHOLD) {
+            if (!now.vid || !now.pid) {
+              rebindStatus.textContent = 'Could not identify that device\'s vendor/product ID — cannot bind it.';
+              cancelAxisRebind();
+              renderBindings();
+              return;
+            }
+            completeAxisRebind(pendingAxisRebindConcept, now, i);
+            return;
+          }
+        }
+      }
+      axisRebindRAF = requestAnimationFrame(pollAxisRebind);
+    }
+
+    function startAxisRebind(concept){
+      cancelAxisRebind();
+      cancelButtonRebind();
+      pendingRebindAction = null; // mutually exclusive with a pending keyboard rebind
+      pendingAxisRebindConcept = concept;
+      GamepadModule.poll();
+      axisRebindBaseline = GamepadModule.getSnapshot().map(p => ({ index: p.index, axes: p.axesValues.slice() }));
+      rebindStatus.textContent = `Move the joystick axis for "${CONCEPT_LABELS[concept] || concept}"… (Esc to cancel)`;
+      renderBindings();
+      axisRebindRAF = requestAnimationFrame(pollAxisRebind);
+    }
+
+    // Escape cancels an in-progress axis capture (separate from the keyboard rebind
+    // Escape handler below, which only fires when pendingRebindAction is set)
+    window.addEventListener('keydown', e => {
+      if (e.code !== 'Escape' || !pendingAxisRebindConcept) return;
+      cancelAxisRebind();
+      rebindStatus.textContent = 'Joystick bind cancelled.';
+      renderBindings();
+    });
+
+    // =====================================================================
+    // Joystick BUTTON rebind capture — for decoupleToggle/spaceBrake, which are
+    // discrete toggles rather than analog axes. Unlike axis capture (which looks
+    // for the largest deviation from a baseline), a button binding is a plain
+    // rising edge: any button not already held at capture start that becomes
+    // pressed is the one bound. No direction pairing needed (one action, one button).
+    // =====================================================================
+    const BUTTON_BINDABLE_ACTIONS = ['decoupleToggle', 'spaceBrake'];
+    let pendingButtonRebindAction = null;
+    let buttonRebindBaseline = null;
+    let buttonRebindRAF = null;
+
+    function cancelButtonRebind(){
+      if (buttonRebindRAF !== null) cancelAnimationFrame(buttonRebindRAF);
+      buttonRebindRAF = null;
+      pendingButtonRebindAction = null;
+      buttonRebindBaseline = null;
+    }
+
+    function completeButtonRebind(action, pad, buttonIndex){
+      const niceName = pad.id.split('(')[0].trim();
+      buttonMap[action] = { vid: pad.vid, pid: pad.pid, buttonIndex, label: `${niceName} button[${buttonIndex}]` };
+      rebindStatus.textContent = `Bound "${niceName}" button [${buttonIndex}] to ${ControlsModule.getActionLabels()[action]}.`;
+      cancelButtonRebind();
+      renderBindings();
+    }
+
+    function pollButtonRebind(){
+      if (!pendingButtonRebindAction) return;
+      GamepadModule.poll();
+      const current = GamepadModule.getSnapshot();
+      for (const base of buttonRebindBaseline) {
+        const now = current.find(p => p.index === base.index);
+        if (!now) continue;
+        for (let i = 0; i < base.buttons.length; i++) {
+          if (now.buttonsPressed[i] && !base.buttons[i]) {
+            if (!now.vid || !now.pid) {
+              rebindStatus.textContent = 'Could not identify that device\'s vendor/product ID — cannot bind it.';
+              cancelButtonRebind();
+              renderBindings();
+              return;
+            }
+            completeButtonRebind(pendingButtonRebindAction, now, i);
+            return;
+          }
+        }
+      }
+      buttonRebindRAF = requestAnimationFrame(pollButtonRebind);
+    }
+
+    function startButtonRebind(action){
+      cancelAxisRebind();
+      cancelButtonRebind();
+      pendingRebindAction = null; // mutually exclusive with a pending keyboard rebind
+      pendingButtonRebindAction = action;
+      GamepadModule.poll();
+      buttonRebindBaseline = GamepadModule.getSnapshot().map(p => ({ index: p.index, buttons: p.buttonsPressed.slice() }));
+      rebindStatus.textContent = `Press the joystick button for "${ControlsModule.getActionLabels()[action]}"… (Esc to cancel)`;
+      renderBindings();
+      buttonRebindRAF = requestAnimationFrame(pollButtonRebind);
+    }
+
+    // Escape cancels an in-progress button capture
+    window.addEventListener('keydown', e => {
+      if (e.code !== 'Escape' || !pendingButtonRebindAction) return;
+      cancelButtonRebind();
+      rebindStatus.textContent = 'Joystick bind cancelled.';
+      renderBindings();
+    });
+
+    function renderBindings(){
+      const labels = ControlsModule.getActionLabels();
+      const bindings = ControlsModule.getBindings();
+      const stick = JoystickAxes.read();
+
+      let html = '<table id="ctrl-bindings-table"><thead><tr>' +
+        '<th>Action</th><th>Keyboard</th><th>Joystick</th>' +
+        '</tr></thead><tbody>';
+
+      for (const action of Object.keys(labels)) {
+        const chords = bindings[action] || [];
+        const chordLabel = chords.length ? chords.map(ControlsModule.chordToLabel).join(' / ') : '(unbound)';
+        const isPending = pendingRebindAction === action;
+        const kbCell = `<div>${isPending ? '<span class="ctrl-found">press a key…</span>' : `<span class="ctrl-found">${chordLabel}</span>`}</div>` +
+          `<div style="margin-top:4px"><button type="button" class="ctrl-rebind-btn" data-action="${action}">${isPending ? 'Cancel' : 'Rebind'}</button></div>`;
+
+        let joyCell;
+        const concept = ACTION_TO_AXIS_CONCEPT[action];
+        if (concept) {
+          const isListening = pendingAxisRebindConcept === concept;
+          const binding = axisMap[concept];
+          let valueHtml;
+          if (isListening) {
+            valueHtml = '<span class="ctrl-found">listening… move a stick axis</span>';
+          } else if (binding) {
+            const detected = stick[STICK_KEY_FOR_CONCEPT[concept]] !== null;
+            const label = binding.label || `js${binding.instance}_${binding.axis}`;
+            valueHtml = detected
+              ? `<span class="ctrl-found">${label}</span>`
+              : `<span class="ctrl-missing">${label} (not detected)</span>`;
+          } else {
+            valueHtml = '<span class="ctrl-missing">unbound</span>';
+          }
+          const inverted = JoystickAxes.getInvert()[concept];
+          const invertHtml = (binding && !isListening)
+            ? `<label style="display:inline-flex; align-items:center; gap:4px; margin-left:8px; color:var(--hud-dim)">` +
+              `<input type="checkbox" class="ctrl-invert-checkbox" data-concept="${concept}" ${inverted ? 'checked' : ''} style="width:auto"> invert</label>`
+            : '';
+          let actionBtnHtml;
+          if (isListening) {
+            actionBtnHtml = `<button type="button" class="ctrl-axis-rebind-btn" data-concept="${concept}">Cancel</button>`;
+          } else if (binding) {
+            actionBtnHtml = `<button type="button" class="ctrl-axis-unbind-btn" data-concept="${concept}">Unbind</button>`;
+          } else {
+            actionBtnHtml = `<button type="button" class="ctrl-axis-rebind-btn" data-concept="${concept}">Bind Axis</button>`;
+          }
+          joyCell = `<div>${valueHtml}</div><div style="margin-top:4px; display:flex; align-items:center">${actionBtnHtml}${invertHtml}</div>`;
+        } else if (BUTTON_BINDABLE_ACTIONS.includes(action)) {
+          const isListening = pendingButtonRebindAction === action;
+          const binding = buttonMap[action];
+          let valueHtml;
+          if (isListening) {
+            valueHtml = '<span class="ctrl-found">listening… press a button</span>';
+          } else if (binding) {
+            const detected = !!GamepadModule.findByVidPid(binding.vid, binding.pid);
+            valueHtml = detected
+              ? `<span class="ctrl-found">${binding.label}</span>`
+              : `<span class="ctrl-missing">${binding.label} (not detected)</span>`;
+          } else {
+            valueHtml = '<span class="ctrl-missing">unbound</span>';
+          }
+          let actionBtnHtml;
+          if (isListening) {
+            actionBtnHtml = `<button type="button" class="ctrl-button-rebind-btn" data-action="${action}">Cancel</button>`;
+          } else if (binding) {
+            actionBtnHtml = `<button type="button" class="ctrl-button-unbind-btn" data-action="${action}">Unbind</button>`;
+          } else {
+            actionBtnHtml = `<button type="button" class="ctrl-button-rebind-btn" data-action="${action}">Bind Joystick Button</button>`;
+          }
+          joyCell = `<div>${valueHtml}</div><div style="margin-top:4px">${actionBtnHtml}</div>`;
+        } else {
+          joyCell = '<span class="ctrl-missing">— (keyboard/mouse only)</span>';
+        }
+
+        html += `<tr>
+          <td class="ctrl-action-label">${labels[action]}</td>
+          <td>${kbCell}</td>
+          <td>${joyCell}</td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+      bindingsList.innerHTML = html;
+
+      bindingsList.querySelectorAll('.ctrl-rebind-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          cancelAxisRebind(); // mutually exclusive with an in-progress joystick capture
+          cancelButtonRebind();
+          const action = btn.getAttribute('data-action');
+          pendingRebindAction = pendingRebindAction === action ? null : action;
+          renderBindings();
+        });
+      });
+
+      bindingsList.querySelectorAll('.ctrl-axis-rebind-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const concept = btn.getAttribute('data-concept');
+          if (pendingAxisRebindConcept === concept) { cancelAxisRebind(); renderBindings(); return; }
+          startAxisRebind(concept);
+        });
+      });
+
+      bindingsList.querySelectorAll('.ctrl-axis-unbind-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const concept = btn.getAttribute('data-concept');
+          delete axisMap[concept];
+          rebindStatus.textContent = `Unbound joystick axis for "${CONCEPT_LABELS[concept] || concept}".`;
+          renderBindings();
+        });
+      });
+
+      bindingsList.querySelectorAll('.ctrl-button-rebind-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const action = btn.getAttribute('data-action');
+          if (pendingButtonRebindAction === action) { cancelButtonRebind(); renderBindings(); return; }
+          startButtonRebind(action);
+        });
+      });
+
+      bindingsList.querySelectorAll('.ctrl-button-unbind-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const action = btn.getAttribute('data-action');
+          delete buttonMap[action];
+          rebindStatus.textContent = `Unbound joystick button for "${ControlsModule.getActionLabels()[action]}".`;
+          renderBindings();
+        });
+      });
+
+      // one invert checkbox per axis concept, but two actions share a concept (e.g.
+      // pitchUp/pitchDown both -> 'pitch') so re-render on change to keep both rows in sync
+      bindingsList.querySelectorAll('.ctrl-invert-checkbox').forEach(cb => {
+        cb.addEventListener('change', () => {
+          JoystickAxes.setInvert(cb.getAttribute('data-concept'), cb.checked);
+          renderBindings();
+        });
+      });
+    }
+
+    // capture the next key press while a rebind is pending, before it reaches game input
+    window.addEventListener('keydown', e => {
+      if (!pendingRebindAction) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (e.code === 'Escape') { pendingRebindAction = null; renderBindings(); return; }
+      ControlsModule.setBinding(pendingRebindAction, [[e.code]]);
+      rebindStatus.textContent = `Set "${ControlsModule.getActionLabels()[pendingRebindAction]}" to ${ControlsModule.chordToLabel([e.code])}.`;
+      pendingRebindAction = null;
+      renderBindings();
+    }, true); // capture phase so it runs before the main game keydown handler
+
+    async function refreshPresetList(){
+      if (!ControlsModule.hasArtifactStorage) {
+        presetSelect.innerHTML = '';
+        presetStatus.textContent = 'Browser preset storage unavailable here — use export/import file instead.';
+        return;
+      }
+      try {
+        const names = await ControlsModule.listPresets();
+        presetSelect.innerHTML = names.map(n => `<option value="${n}">${n}</option>`).join('');
+      } catch (err) {
+        presetStatus.textContent = 'Could not list presets: ' + err.message;
+      }
+    }
+
+    document.getElementById('ctrl-save-preset-btn').addEventListener('click', async () => {
+      const name = presetNameInput.value.trim();
+      if (!name) { presetStatus.textContent = 'Enter a preset name first.'; return; }
+      try {
+        await ControlsModule.savePreset(name);
+        presetStatus.textContent = `Saved preset "${name}".`;
+        refreshPresetList();
+      } catch (err) {
+        presetStatus.textContent = err.message === 'no-storage'
+          ? 'Browser preset storage unavailable here — use export/import file instead.'
+          : 'Save failed: ' + err.message;
+      }
+    });
+
+    document.getElementById('ctrl-load-preset-btn').addEventListener('click', async () => {
+      const name = presetSelect.value;
+      if (!name) { presetStatus.textContent = 'Select a preset first.'; return; }
+      try {
+        await ControlsModule.loadPreset(name);
+        presetStatus.textContent = `Loaded preset "${name}".`;
+        renderBindings();
+      } catch (err) {
+        presetStatus.textContent = 'Load failed: ' + err.message;
+      }
+    });
+
+    document.getElementById('ctrl-delete-preset-btn').addEventListener('click', async () => {
+      const name = presetSelect.value;
+      if (!name) { presetStatus.textContent = 'Select a preset first.'; return; }
+      try {
+        await ControlsModule.deletePreset(name);
+        presetStatus.textContent = `Deleted preset "${name}".`;
+        refreshPresetList();
+      } catch (err) {
+        presetStatus.textContent = 'Delete failed: ' + err.message;
+      }
+    });
+
+    document.getElementById('ctrl-export-btn').addEventListener('click', () => {
+      const name = presetNameInput.value.trim() || 'control-preset';
+      ControlsModule.exportToFile(name);
+      presetFileStatus.textContent = `Exported "${name}.json".`;
+    });
+
+    document.getElementById('ctrl-copy-path-btn').addEventListener('click', async () => {
+      const pathInput = document.getElementById('ctrl-default-path');
+      pathInput.select();
+      try {
+        await navigator.clipboard.writeText(pathInput.value);
+        importStatus.textContent = 'Path copied — paste into the file dialog\'s address bar (Ctrl+L, then paste, then Enter).';
+      } catch (err) {
+        document.execCommand('copy'); // fallback for contexts without Clipboard API permission
+        importStatus.textContent = 'Path copied to clipboard (fallback method).';
+      }
+    });
+
+    document.getElementById('ctrl-import-preset-btn').addEventListener('click', () => {
+      document.getElementById('ctrl-import-preset-input').click();
+    });
+
+    document.getElementById('ctrl-import-preset-input').addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          ControlsModule.importFromFileText(reader.result);
+          presetFileStatus.textContent = `Imported preset from "${file.name}".`;
+          renderBindings();
+        } catch (err) {
+          presetFileStatus.textContent = 'Import failed: file is not a valid preset.';
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    });
+
+    document.getElementById('ctrl-file-input').addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const parsed = ControlsModule.parseActionMapsXML(reader.result);
+          const { overrides, matched, notFound } = ControlsModule.buildOverridesFromParsed(parsed);
+          ControlsModule.applyOverrides(overrides);
+          const labels = ControlsModule.getActionLabels();
+          const matchedHtml = matched.map(m =>
+            `<div class="ctrl-found">✓ ${labels[m.simAction]} ← ${m.scName} (${m.chords.map(ControlsModule.chordToLabel).join(' / ')})</div>`
+          ).join('');
+          const notFoundHtml = notFound.map(nf =>
+            `<div class="ctrl-missing">– ${labels[nf.simAction]}: not found in file, kept current</div>`
+          ).join('');
+          importResults.innerHTML = matchedHtml + notFoundHtml;
+          const usesCtrl = matched.some(m => m.chords.some(chord => chord.includes('ControlLeft') || chord.includes('ControlRight')));
+          importStatus.textContent = `Applied ${matched.length} of ${matched.length + notFound.length} bindings from "${file.name}".`
+            + (usesCtrl ? ' Note: Ctrl is bound to an action, but is disabled outside fullscreen by default — enter fullscreen to use it.' : '');
+
+          // also pull the joystick device list and axis bindings out of the same file —
+          // done before renderBindings() so its Joystick column reflects this file, not a stale one
+          try {
+            scDevices = ControlsModule.parseJoystickDevices(reader.result);
+            const axisRaw = ControlsModule.parseJoystickAxisBindings(reader.result);
+            axisMap = ControlsModule.buildAxisMap(axisRaw);
+            GamepadModule.poll();
+            renderGamepads();
+            renderAxisMap();
+          } catch (devErr) {
+            scDevicesList.innerHTML = '(could not read device list from this file)';
+          }
+          renderBindings();
+        } catch (err) {
+          importStatus.textContent = 'Import failed: ' + err.message;
+          importResults.innerHTML = '';
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    });
+
+    document.getElementById('ctrl-reset-btn').addEventListener('click', () => {
+      ControlsModule.resetToDefault();
+      renderBindings();
+      rebindStatus.textContent = 'Reset to sandbox defaults.';
+    });
+
+    toggleBtn.addEventListener('click', () => {
+      const opening = panel.style.display === 'none';
+      panel.style.display = opening ? 'block' : 'none';
+      if (opening) { renderBindings(); refreshPresetList(); }
+    });
+  })();
+
+  // ---------- Physics step ----------
+  function step(dt){
+    // read the current mouse-look deflection (persists until moved back — see MouseLook)
+    const mouseInput = MouseLook.consume();
+
+    // fresh gamepad values every physics tick — not just while the controls panel is
+    // open — since actual flight needs current-frame axis data, not a 100ms-stale sample
+    GamepadModule.poll();
+    const stick = JoystickAxes.read();
+
+    // decouple is a real toggle (edge-detected, fires once per press); space brake is
+    // hold-to-brake, not a toggle — active for exactly as long as the key/button is held
+    if (JoystickButtons.justPressed('decoupleToggle')) ship.decoupled = !ship.decoupled;
+    ship.spaceBrakeOn = ControlsModule.isActive('spaceBrake') || JoystickButtons.isPressed('spaceBrake');
+
+    // if we just crashed, freeze controls and count down the explosion before respawning
+    if (ship.exploding) {
+      ship.explosionTimer -= dt;
+      if (ship.explosionTimer <= 0) resetShip();
+      return;
+    }
+
+    const t = ship.type;
+
+    // --- Forward/back thrust — direct hold-to-thrust (like the other strafe axes).
+    // Keyboard and a bound joystick axis are additive, not either/or, so the joystick
+    // stays fully optional: unplugged or unbound, keyboard alone still drives everything. ---
+    let throttleInput = 0;
+    if (ControlsModule.isActive('strafeForward')) throttleInput += 1;
+    if (ControlsModule.isActive('strafeBack')) throttleInput -= 1;
+    if (stick.longitudinal !== null) throttleInput += stick.longitudinal;
+    ship.throttle = clamp(throttleInput, -1, 1);
+
+    // --- Angular input (rotation thrusters) ---
+    let pitchInput = 0, yawInput = 0, rollInput = 0;
+    if (ControlsModule.isActive('pitchUp')) pitchInput -= 1;
+    if (ControlsModule.isActive('pitchDown')) pitchInput += 1;
+    if (ControlsModule.isActive('yawLeft')) yawInput -= 1;
+    if (ControlsModule.isActive('yawRight')) yawInput += 1;
+    if (ControlsModule.isActive('rollLeft')) rollInput -= 1;
+    if (ControlsModule.isActive('rollRight')) rollInput += 1;
+
+    // joystick axes (if bound in the imported actionmaps.xml and currently detected) add
+    // on top of keyboard input rather than replacing it — keyboard, mouse, and joystick
+    // all work simultaneously; the joystick is purely optional.
+    if (stick.pitch !== null) pitchInput += stick.pitch;
+    if (stick.yaw !== null) yawInput += stick.yaw;
+    if (stick.roll !== null) rollInput += stick.roll;
+
+    // mouse look adds smoothly on top of any keyboard/joystick input
+    pitchInput += mouseInput.pitch;
+    yawInput += mouseInput.yaw;
+
+    pitchInput = clamp(pitchInput, -1, 1);
+    yawInput = clamp(yawInput, -1, 1);
+    rollInput = clamp(rollInput, -1, 1);
+
+    ship.angVel.pitch += pitchInput * t.angularThrust.pitch * dt;
+    ship.angVel.yaw   += yawInput   * t.angularThrust.yaw   * dt;
+    ship.angVel.roll  += rollInput  * t.angularThrust.roll  * dt;
+
+    // angular drag (dampening — simulates RCS auto-dampening like SC's flight computer)
+    ship.angVel.pitch -= ship.angVel.pitch * t.angularDrag * dt;
+    ship.angVel.yaw   -= ship.angVel.yaw   * t.angularDrag * dt;
+    ship.angVel.roll  -= ship.angVel.roll  * t.angularDrag * dt;
+
+    // clamp angular velocity
+    ship.angVel.pitch = clamp(ship.angVel.pitch, -t.maxAngVel.pitch, t.maxAngVel.pitch);
+    ship.angVel.yaw   = clamp(ship.angVel.yaw,   -t.maxAngVel.yaw,   t.maxAngVel.yaw);
+    ship.angVel.roll  = clamp(ship.angVel.roll,  -t.maxAngVel.roll,  t.maxAngVel.roll);
+
+    ship.quat = integrateOrientation(ship.quat, ship.angVel, dt);
+
+    // --- Build local axes from current orientation — full body frame, including roll,
+    // so strafe thrust is truly hull-relative (matches real RCS thrusters fixed to the ship) ---
+    const { forward, right, up } = computeAxes(ship.quat);
+
+    // --- Linear thrust — strafe left/right/up/down ---
+    let strafeInput = { x: 0, y: 0 }; // x = right/left, y = up/down
+    if (ControlsModule.isActive('strafeLeft')) strafeInput.x -= 1;
+    if (ControlsModule.isActive('strafeRight')) strafeInput.x += 1;
+    if (ControlsModule.isActive('strafeUp')) strafeInput.y += 1;
+    if (ControlsModule.isActive('strafeDown')) strafeInput.y -= 1;
+    // additive with keyboard, same reasoning as pitch/yaw/roll/throttle above
+    if (stick.lateral !== null) strafeInput.x += stick.lateral;
+    if (stick.vertical !== null) strafeInput.y += stick.vertical;
+    strafeInput.x = clamp(strafeInput.x, -1, 1);
+    strafeInput.y = clamp(strafeInput.y, -1, 1);
+
+    const mainThrustMag = ship.throttle >= 0 ? ship.throttle * t.linearThrust.main : ship.throttle * t.linearThrust.retro;
+    const accel = { x: 0, y: 0, z: 0 };
+    addScaled(accel, forward, mainThrustMag / t.mass);
+    addScaled(accel, right, (strafeInput.x * t.linearThrust.strafe) / t.mass);
+    addScaled(accel, up, (strafeInput.y * t.linearThrust.vertical) / t.mass);
+
+    if (ship.spaceBrakeOn) {
+      // space brake: actively kill velocity, works in either flight mode
+      // (in coupled mode this just adds to the normal drag; in decoupled
+      // mode there's no passive drag, so this is the only way to stop)
+      ship.vel.x -= ship.vel.x * 3 * dt;
+      ship.vel.y -= ship.vel.y * 3 * dt;
+      ship.vel.z -= ship.vel.z * 3 * dt;
+    }
+
+    ship.vel.x += accel.x * dt;
+    ship.vel.y += accel.y * dt;
+    ship.vel.z += accel.z * dt;
+
+    // --- Coupled mode: flight computer bleeds off velocity not aligned with input / auto-brakes ---
+    if (!ship.decoupled) {
+      const drag = t.linearDrag;
+      ship.vel.x -= ship.vel.x * drag * dt;
+      ship.vel.y -= ship.vel.y * drag * dt;
+      ship.vel.z -= ship.vel.z * drag * dt;
+
+      // flight computer speed limiter: hard-caps velocity at SCM speed, same as in-game coupled flight
+      const speed = Math.hypot(ship.vel.x, ship.vel.y, ship.vel.z);
+      if (speed > t.scmSpeed) {
+        const scale = t.scmSpeed / speed;
+        ship.vel.x *= scale;
+        ship.vel.y *= scale;
+        ship.vel.z *= scale;
+      }
+    }
+    // in decoupled mode, no drag and no speed cap — pure Newtonian coasting, like SC's decoupled flight
+
+    ship.pos.x += ship.vel.x * dt;
+    ship.pos.y += ship.vel.y * dt;
+    ship.pos.z += ship.vel.z * dt;
+
+    // --- Collision check against the station ---
+    const dStation = Math.hypot(
+      ship.pos.x - STATION.pos.x,
+      ship.pos.y - STATION.pos.y,
+      ship.pos.z - STATION.pos.z
+    );
+    if (dStation < STATION.collisionRadius) {
+      ship.exploding = true;
+      ship.explosionTimer = 1.0;
+      ship.vel = { x: 0, y: 0, z: 0 };
+      ship.angVel = { pitch: 0, yaw: 0, roll: 0 };
+    }
+
+    updateProjectiles(dt);
+  }
+
+  function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+  function addScaled(target, vec, s){ target.x += vec.x * s; target.y += vec.y * s; target.z += vec.z * s; }
+  function cross(a, b){
+    return { x: a.y*b.z - a.z*b.y, y: a.z*b.x - a.x*b.z, z: a.x*b.y - a.y*b.x };
+  }
+  function normalize(v){
+    const len = Math.hypot(v.x, v.y, v.z) || 1;
+    return { x: v.x/len, y: v.y/len, z: v.z/len };
+  }
+
+  // ---------- Quaternion orientation math ----------
+  // Body-frame integration: angular velocity (pitch/yaw/roll) is always expressed
+  // relative to the ship's CURRENT orientation, so rotating never depends on the
+  // order rotations were applied in — fixes pitch/yaw feeling inverted after a roll.
+  function quatMultiply(a, b){
+    return {
+      w: a.w*b.w - a.x*b.x - a.y*b.y - a.z*b.z,
+      x: a.w*b.x + a.x*b.w + a.y*b.z - a.z*b.y,
+      y: a.w*b.y - a.x*b.z + a.y*b.w + a.z*b.x,
+      z: a.w*b.z + a.x*b.y - a.y*b.x + a.z*b.w
+    };
+  }
+  function quatNormalize(q){
+    const len = Math.sqrt(q.x*q.x + q.y*q.y + q.z*q.z + q.w*q.w) || 1;
+    return { x: q.x/len, y: q.y/len, z: q.z/len, w: q.w/len };
+  }
+  function rotateVecByQuat(v, q){
+    const qv = { w: 0, x: v.x, y: v.y, z: v.z };
+    const qConj = { w: q.w, x: -q.x, y: -q.y, z: -q.z };
+    const r = quatMultiply(quatMultiply(q, qv), qConj);
+    return { x: r.x, y: r.y, z: r.z };
+  }
+  function integrateOrientation(q, angVel, dt){
+    // angVel.pitch = rotation about local X (right), .yaw about local Y (up), .roll about local Z (forward)
+    const omega = { w: 0, x: angVel.pitch, y: angVel.yaw, z: angVel.roll };
+    const qDot = quatMultiply(q, omega);
+    const nq = {
+      x: q.x + 0.5 * qDot.x * dt,
+      y: q.y + 0.5 * qDot.y * dt,
+      z: q.z + 0.5 * qDot.z * dt,
+      w: q.w + 0.5 * qDot.w * dt
+    };
+    return quatNormalize(nq);
+  }
+
+  function computeAxes(q){
+    // base vectors match the sandbox's original convention (forward=+Z, right=+X, up=-Y)
+    return {
+      forward: rotateVecByQuat({ x: 0, y: 0, z: 1 }, q),
+      right: rotateVecByQuat({ x: 1, y: 0, z: 0 }, q),
+      up: rotateVecByQuat({ x: 0, y: -1, z: 0 }, q)
+    };
+  }
+
+  // ---------- Simple star field for spatial reference ----------
+  const stars = [];
+  for (let i = 0; i < 400; i++){
+    stars.push({
+      x: (Math.random() - 0.5) * 4000,
+      y: (Math.random() - 0.5) * 4000,
+      z: Math.random() * 4000
+    });
+  }
+
+  // ---------- Static beacon markers (near-field, for gauging speed/direction) ----------
+  const beacons = [];
+  const BEACON_FIELD = 1400; // wrap range, much tighter than star field so they read as "close"
+  for (let i = 0; i < 140; i++){
+    beacons.push({
+      x: (Math.random() - 0.5) * BEACON_FIELD * 2,
+      y: (Math.random() - 0.5) * BEACON_FIELD * 2,
+      z: (Math.random() - 0.5) * BEACON_FIELD * 2
+    });
+  }
+
+  // ---------- Render ----------
+  function project(px, py, pz, cam){
+    // transform world point into camera space using camera axes
+    const dx = px - cam.pos.x, dy = py - cam.pos.y, dz = pz - cam.pos.z;
+    const { forward, right, up } = cam.axes;
+    const cx = dx*right.x + dy*right.y + dz*right.z;
+    const cy = dx*up.x + dy*up.y + dz*up.z;
+    const cz = dx*forward.x + dy*forward.y + dz*forward.z;
+    if (cz <= 1) return null; // behind camera
+    const f = 500 / cz;
+    return { x: canvas.width/2 + cx * f, y: canvas.height/2 - cy * f, scale: f, depth: cz };
+  }
+
+  function render(){
+    ctx.fillStyle = '#05070a';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // first-person cockpit view: camera sits at the pilot's seat and uses the ship's
+    // full orientation (including roll) — no chase offset, so no swinging/orbiting.
+    const { forward, right, up } = computeAxes(ship.quat);
+    const cam = {
+      pos: { x: ship.pos.x, y: ship.pos.y, z: ship.pos.z },
+      axes: { forward, right, up }
+    };
+
+    // stars
+    ctx.fillStyle = '#3d5a54';
+    for (const s of stars){
+      const wx = ((s.x + ship.pos.x * 0.02) % 4000 + 4000) % 4000 - 2000;
+      const wy = ((s.y + ship.pos.y * 0.02) % 4000 + 4000) % 4000 - 2000;
+      const wz = ((s.z + ship.pos.z) % 4000 + 4000) % 4000;
+      const p = project(wx, wy, wz, cam);
+      if (p) {
+        const r = clamp(p.scale * 0.6, 0.3, 2.2);
+        ctx.globalAlpha = clamp(1 - p.depth/3000, 0.15, 1);
+        ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI*2); ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+
+    // reference grid plane at y=0 for spatial orientation
+    ctx.strokeStyle = 'rgba(61,90,84,0.35)';
+    ctx.lineWidth = 1;
+    const gridSize = 2000, step = 200;
+    for (let gx = -gridSize; gx <= gridSize; gx += step){
+      drawLine3D(gx, 0, -gridSize, gx, 0, gridSize, cam);
+    }
+    for (let gz = -gridSize; gz <= gridSize; gz += step){
+      drawLine3D(-gridSize, 0, gz, gridSize, 0, gz, cam);
+    }
+
+    // vertical pillars at grid intersections near the ship, for full 3D depth reference
+    ctx.strokeStyle = 'rgba(61,90,84,0.22)';
+    const pillarStep = 400, pillarRange = 1200, pillarHeight = 600;
+    const ox = Math.round(ship.pos.x / pillarStep) * pillarStep;
+    const oz = Math.round(ship.pos.z / pillarStep) * pillarStep;
+    for (let px = ox - pillarRange; px <= ox + pillarRange; px += pillarStep){
+      for (let pz = oz - pillarRange; pz <= oz + pillarRange; pz += pillarStep){
+        drawLine3D(px, -pillarHeight, pz, px, pillarHeight, pz, cam);
+      }
+    }
+
+    // static beacon markers — wrapped near ship so they always surround it, used to read speed/direction
+    ctx.fillStyle = '#8fd3c7';
+    ctx.strokeStyle = '#8fd3c7';
+    for (const b of beacons){
+      const M = BEACON_FIELD * 2;
+      const wx = ((b.x + ship.pos.x) % M + M) % M - BEACON_FIELD;
+      const wy = ((b.y + ship.pos.y) % M + M) % M - BEACON_FIELD;
+      const wz = ((b.z + ship.pos.z) % M + M) % M - BEACON_FIELD;
+      const p = project(wx, wy, wz, cam);
+      if (p){
+        const r = clamp(p.scale * 1.4, 0.6, 4);
+        ctx.globalAlpha = clamp(1 - p.depth/BEACON_FIELD*0.6, 0.25, 1);
+        ctx.beginPath();
+        ctx.moveTo(p.x - r*2, p.y); ctx.lineTo(p.x + r*2, p.y);
+        ctx.moveTo(p.x, p.y - r*2); ctx.lineTo(p.x, p.y + r*2);
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+
+    // static station — a fixed hazard to practice flying around and avoiding
+    drawStation(cam);
+
+    // weapon tracers
+    drawProjectiles(cam);
+
+    // prograde velocity marker (still useful from the cockpit to read decoupled drift)
+    drawProgradeMarker(cam);
+
+    // explosion flash overlay on collision
+    if (ship.exploding) {
+      drawExplosion(1 - ship.explosionTimer / 1.0);
+    }
+
+    // mouse-look virtual stick reticle — shows current deflection from center
+    if (MouseLook.isCaptured()) {
+      drawMouseReticle();
+    }
+
+    updateHUD();
+  }
+
+  function drawMouseReticle(){
+    const { x, y, max } = MouseLook.getOffset();
+    const cx = canvas.width / 2, cy = canvas.height / 2;
+    const scale = 0.55; // keep the reticle's travel visually inside the crosshair area
+    const rx = cx + x * scale, ry = cy + y * scale;
+
+    ctx.strokeStyle = 'rgba(143,211,199,0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(cx, cy, max * scale, 0, Math.PI * 2); ctx.stroke();
+
+    ctx.strokeStyle = '#ff7a45';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(rx, ry, 5, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(rx, ry); ctx.stroke();
+  }
+
+  function drawProjectiles(cam){
+    for (const pr of projectiles){
+      const speed = Math.hypot(pr.vel.x, pr.vel.y, pr.vel.z) || 1;
+      const dirx = pr.vel.x / speed, diry = pr.vel.y / speed, dirz = pr.vel.z / speed;
+      const trailLen = 14;
+      const tail = {
+        x: pr.pos.x - dirx * trailLen,
+        y: pr.pos.y - diry * trailLen,
+        z: pr.pos.z - dirz * trailLen
+      };
+      const head = project(pr.pos.x, pr.pos.y, pr.pos.z, cam);
+      const tailP = project(tail.x, tail.y, tail.z, cam);
+      if (!head) continue;
+      const fade = clamp(1 - pr.age / WEAPON.lifetime, 0.15, 1);
+      if (tailP) {
+        ctx.strokeStyle = `rgba(255, 230, 150, ${fade.toFixed(3)})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(tailP.x, tailP.y);
+        ctx.lineTo(head.x, head.y);
+        ctx.stroke();
+      }
+      ctx.fillStyle = `rgba(255, 255, 255, ${fade.toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(head.x, head.y, clamp(head.scale * 0.8, 1, 3), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawStation(cam){
+    const p = STATION.pos, h = STATION.halfSize;
+    const corners = [];
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+      corners.push({ x: p.x + sx*h, y: p.y + sy*h, z: p.z + sz*h });
+    }
+    // 12 edges of a cube, indices into the 8 corners generated above (order: x,y,z each -1/1)
+    const edges = [
+      [0,1],[0,2],[0,4],[1,3],[1,5],[2,3],
+      [2,6],[3,7],[4,5],[4,6],[5,7],[6,7]
+    ];
+    ctx.strokeStyle = '#ff4d4d';
+    ctx.lineWidth = 1.6;
+    for (const [a,b] of edges){
+      drawLine3D(corners[a].x, corners[a].y, corners[a].z, corners[b].x, corners[b].y, corners[b].z, cam);
+    }
+  }
+
+  function drawExplosion(progress){
+    // progress goes 0 -> 1 over the 1 second explosion; full-screen flash that fades and radiates
+    const alpha = 1 - progress;
+    ctx.fillStyle = `rgba(255, 140, 60, ${(alpha * 0.85).toFixed(3)})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const cx = canvas.width / 2, cy = canvas.height / 2;
+    ctx.strokeStyle = `rgba(255,255,255,${alpha.toFixed(3)})`;
+    ctx.lineWidth = 2;
+    const rayCount = 14;
+    for (let i = 0; i < rayCount; i++){
+      const angle = (i / rayCount) * Math.PI * 2;
+      const len = 60 + progress * Math.max(canvas.width, canvas.height) * 0.6;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(angle) * len, cy + Math.sin(angle) * len);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(3)})`;
+    ctx.font = '16px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText('COLLISION — RESETTING', cx, cy + 80);
+  }
+
+  function drawLine3D(x1,y1,z1,x2,y2,z2, cam){
+    const p1 = project(x1,y1,z1, cam);
+    const p2 = project(x2,y2,z2, cam);
+    if (!p1 || !p2) return;
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.stroke();
+  }
+
+  function drawProgradeMarker(cam){
+    const p = ship.pos;
+    const speed = Math.hypot(ship.vel.x, ship.vel.y, ship.vel.z);
+    if (speed > 0.5){
+      const progradePoint = {
+        x: p.x + ship.vel.x / speed * 40,
+        y: p.y + ship.vel.y / speed * 40,
+        z: p.z + ship.vel.z / speed * 40
+      };
+      const pp = project(progradePoint.x, progradePoint.y, progradePoint.z, cam);
+      if (pp){
+        ctx.strokeStyle = '#8fd3c7';
+        ctx.beginPath(); ctx.arc(pp.x, pp.y, 6, 0, Math.PI*2); ctx.stroke();
+      }
+    }
+  }
+
+  function updateHUD(){
+    const speed = Math.hypot(ship.vel.x, ship.vel.y, ship.vel.z);
+    document.getElementById('s-throttle').textContent = Math.round(ship.throttle*100) + '%';
+    document.getElementById('bar-throttle').style.width = Math.round(Math.abs(ship.throttle)*100) + '%';
+    document.getElementById('s-speed').textContent = speed.toFixed(1) + ' m/s';
+    document.getElementById('s-decoupled').textContent = ship.decoupled ? 'ON' : 'OFF';
+    const brakeEl = document.getElementById('s-brake');
+    brakeEl.textContent = ship.spaceBrakeOn ? 'ON' : 'OFF';
+    brakeEl.className = ship.spaceBrakeOn ? 'value on' : 'value';
+    document.getElementById('s-ship').textContent = ship.type.name;
+    const flag = document.getElementById('s-mode-flag');
+    flag.textContent = ship.decoupled ? 'DECOUPLED' : 'COUPLED';
+    flag.className = ship.decoupled ? 'on' : '';
+  }
+
+  // ---------- Main loop ----------
+  let last = performance.now();
+  function loop(now){
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    try {
+      step(dt);
+      render();
+    } catch (err) {
+      console.error('Frame error (continuing):', err);
+    }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

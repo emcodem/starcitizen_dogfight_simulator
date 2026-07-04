@@ -1,0 +1,19 @@
+{
+  "name": "vector-flight-sandbox",
+  "version": "0.1.0",
+  "description": "Vector — Flight Practice Sandbox, a Newtonian Star Citizen-inspired flight sim playable in the browser.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "jsdom": "^25.0.1",
+    "typescript": "^6.0.3",
+    "vite": "^7.3.6",
+    "vitest": "^4.1.9"
+  }
+}
