@@ -9,6 +9,7 @@ import { initFullscreenGuard } from './ui/fullscreenGuard';
 import { initTouchControls } from './ui/touchControls';
 import { initMouseCapture, initKeyboardFireFallback } from './ui/mouseCapture';
 import { initControlsPanel } from './ui/controlsPanel';
+import { initModeToggle } from './ui/modeToggle';
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
 function resize(): void {
@@ -27,6 +28,7 @@ initTouchControls(ship);
 initMouseCapture();
 initKeyboardFireFallback();
 initControlsPanel();
+initModeToggle(ship);
 
 // ---------- Main loop ----------
 let last = performance.now();
