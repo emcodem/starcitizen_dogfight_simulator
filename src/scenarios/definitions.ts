@@ -27,7 +27,7 @@ export interface AimTrainingOptions {
   durationSec: number | null;    // null = indefinite (no time-based win, see runtime.ts)
 }
 
-export const AIM_TRAINING_DEFAULTS: AimTrainingOptions = { droneCount: 8, aggressiveness: 0.5, durationSec: 120 };
+export const AIM_TRAINING_DEFAULTS: AimTrainingOptions = { droneCount: 15, aggressiveness: 0.5, durationSec: 120 };
 
 export function buildAimTrainingScenario(opts: AimTrainingOptions = AIM_TRAINING_DEFAULTS): ScenarioConfig {
   const orbiterCount = Math.ceil(opts.droneCount / 2);

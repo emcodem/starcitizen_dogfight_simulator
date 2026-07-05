@@ -14,9 +14,32 @@ let list: HTMLElement;
 let resultEl: HTMLElement;
 let handlers: ScenarioMenuHandlers;
 
-// Persists across menu open/close (but not page reload) so re-opening the menu doesn't reset a
-// drill the player already tuned.
-const aimTrainingOptions: AimTrainingOptions = { ...AIM_TRAINING_DEFAULTS };
+// Persisted in localStorage so a player's tuned drill settings survive a page reload, not just
+// menu open/close.
+const AIM_TRAINING_STORAGE_KEY = 'vector_aim_training_options';
+
+function loadAimTrainingOptions(): AimTrainingOptions {
+  try {
+    const raw = localStorage.getItem(AIM_TRAINING_STORAGE_KEY);
+    if (!raw) return { ...AIM_TRAINING_DEFAULTS };
+    const parsed = JSON.parse(raw);
+    return {
+      droneCount: typeof parsed.droneCount === 'number' ? parsed.droneCount : AIM_TRAINING_DEFAULTS.droneCount,
+      aggressiveness: typeof parsed.aggressiveness === 'number' ? parsed.aggressiveness : AIM_TRAINING_DEFAULTS.aggressiveness,
+      durationSec: typeof parsed.durationSec === 'number' || parsed.durationSec === null
+        ? parsed.durationSec : AIM_TRAINING_DEFAULTS.durationSec
+    };
+  } catch {
+    return { ...AIM_TRAINING_DEFAULTS }; // localStorage unavailable (e.g. private browsing) or corrupt data
+  }
+}
+
+function saveAimTrainingOptions(): void {
+  try { localStorage.setItem(AIM_TRAINING_STORAGE_KEY, JSON.stringify(aimTrainingOptions)); }
+  catch { /* localStorage can be unavailable (e.g. private browsing) — non-fatal */ }
+}
+
+const aimTrainingOptions: AimTrainingOptions = loadAimTrainingOptions();
 
 function sliderRow(
   label: string, initial: number, min: number, max: number, step: number,
@@ -60,19 +83,19 @@ function buildAimTrainingControls(): HTMLElement {
   wrap.className = 'scenario-slider-block';
 
   wrap.appendChild(sliderRow(
-    'Drones', aimTrainingOptions.droneCount, 2, 20, 2,
+    'Drones', aimTrainingOptions.droneCount, 2, 100, 2,
     v => `${v}`,
-    v => { aimTrainingOptions.droneCount = v; }
+    v => { aimTrainingOptions.droneCount = v; saveAimTrainingOptions(); }
   ));
   wrap.appendChild(sliderRow(
     'Aggressiveness', Math.round(aimTrainingOptions.aggressiveness * 9) + 1, 1, 10, 1,
     v => `${v}/10`,
-    v => { aimTrainingOptions.aggressiveness = (v - 1) / 9; }
+    v => { aimTrainingOptions.aggressiveness = (v - 1) / 9; saveAimTrainingOptions(); }
   ));
   wrap.appendChild(sliderRow(
     'Duration', aimTrainingOptions.durationSec === null ? 11 : Math.round(aimTrainingOptions.durationSec / 60), 1, 11, 1,
     v => v >= 11 ? 'Indefinite' : `${v} min`,
-    v => { aimTrainingOptions.durationSec = v >= 11 ? null : v * 60; }
+    v => { aimTrainingOptions.durationSec = v >= 11 ? null : v * 60; saveAimTrainingOptions(); }
   ));
 
   return wrap;
