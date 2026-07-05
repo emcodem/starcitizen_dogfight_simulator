@@ -1,10 +1,12 @@
-import type { Quat, ShipType, Vec3, EnemyShip } from '../types';
+import type { Quat, ShipType, Vec3, EnemyShip, EnemyBehavior, FighterTuning } from '../types';
 
 export interface EnemySpawnConfig {
   type: ShipType;
   pos: Vec3;
   quat: Quat;
-  turnRateRadPerSec: number;
+  behavior: EnemyBehavior;
+  turnRateRadPerSec?: number; // required in practice for 'turret' spawns, unused for 'fighter'
+  tuning?: FighterTuning;     // 'fighter' only — a FIGHTER_TUNING_* preset (see combat/enemyAI.ts)
 }
 
 // Data-driven scenario definition — adding a new scenario is a new entry in definitions.ts, not

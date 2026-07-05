@@ -29,7 +29,11 @@ function makeTestEnemy(pos: { x: number; y: number; z: number }): EnemyShip {
     pos,
     quat: { x: 0, y: 0, z: 0, w: 1 },
     vel: { x: 0, y: 0, z: 0 },
+    angVel: { pitch: 0, yaw: 0, roll: 0 },
+    boostMeter: 0,
+    boosting: false,
     health: createHealth(50),
+    behavior: 'turret',
     turnRateRadPerSec: 0,
     fireCooldown: 0
   };

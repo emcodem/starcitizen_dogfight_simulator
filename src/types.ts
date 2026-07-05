@@ -63,15 +63,60 @@ export interface Health {
   maxPoints: number;
 }
 
-// A scenario-spawned opponent. Deliberately not a full `Ship` — it has no throttle/decoupled/boost
-// concept, just enough state for AI aiming, movement (currently always stationary), and combat.
+export type EnemyBehavior =
+  | 'turret'  // stationary, just rotates in place to track and fire — see scenarios/runtime.ts
+  | 'fighter'; // full Newtonian flight, driven by combat/enemyAI.ts through physics/flightModel.ts
+
+// Difficulty knobs for the 'fighter' behavior (see combat/enemyAI.ts for how each is used, and its
+// FIGHTER_TUNING_ACE / FIGHTER_TUNING_ROOKIE presets). Defined here rather than in enemyAI.ts so
+// EnemySpawnConfig (scenarios/types.ts) can reference the type without importing combat code.
+export interface FighterTuning {
+  steerGain: number;             // proportional steering aggressiveness (quaternion-error -> stick)
+  engageRange: number;           // ideal stand-off distance for gunnery, meters
+  engageBand: number;            // tolerance around engageRange before throttle corrects
+  closeRange: number;            // beyond this, burn straight at the player to close distance
+  fireRange: number;             // won't pull the trigger past this range
+  fireLateralTolerance: number;  // meters of allowed miss at the target, implied by aim-error * range
+  overshootAngleRad: number;     // aim error beyond which it gives up turning and extends instead
+  repositionExtendBias: number;  // 0..1 weight on "keep extending" vs "turn back toward the player"
+  repositionBoost: boolean;      // whether it burns boost while repositioning
+  threatRange: number;           // player must be this close to be treated as a real threat
+  threatConeRad: number;         // how tightly the player must be boresighted on us to evade
+  evadeMinSeconds: number;       // minimum time spent evading once triggered, avoids flicker
+  modeCommitSeconds: number;     // minimum time spent in whatever mode evade hands off to, so a
+                                  // player holding station on our six can't re-trigger evade before
+                                  // we've had a real chance to turn and fight back — without this a
+                                  // sustained tail-chase re-arms the evade timer every single frame
+                                  // (the threat condition never actually goes away) and it flees forever
+  weaveFreq: number;             // rad/s, engage/evade weave oscillation speed
+}
+
+// Persistent per-enemy AI memory for the 'fighter' behavior — a small state machine plus timers
+// so its maneuvering has continuity frame to frame instead of re-deciding from scratch every tick.
+export interface FighterAIMemory {
+  mode: 'close' | 'engage' | 'evade' | 'reposition';
+  modeTimer: number; // seconds remaining before the current mode may be involuntarily overridden
+  clock: number;     // free-running elapsed seconds, used to phase weave/jink oscillations
+  jinkSeed: number;  // randomized per spawn so multiple fighters don't jink in lockstep
+  tuning: FighterTuning;
+}
+
+// A scenario-spawned opponent. Deliberately not a full `Ship` — no player-console concepts like
+// spaceBrakeOn or exploding. `angVel`/`boostMeter`/`boosting` are only actually driven by physics
+// for 'fighter' behavior, but kept non-optional since EnemyShip must satisfy FlightBody (see
+// physics/flightModel.ts) to be integrated by the same flight model as the player ship.
 export interface EnemyShip {
   type: ShipType;
   pos: Vec3;
   quat: Quat;
   vel: Vec3;
+  angVel: AngularState;
+  boostMeter: number;
+  boosting: boolean;
   health: Health;
-  turnRateRadPerSec: number; // capped aim-turn rate used by rotateTowards
+  behavior: EnemyBehavior;
+  turnRateRadPerSec?: number; // 'turret' only — capped aim-turn rate used by rotateTowards
+  ai?: FighterAIMemory;       // 'fighter' only
   fireCooldown: number;
 }
 
