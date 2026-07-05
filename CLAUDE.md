@@ -27,6 +27,14 @@ unmaintained, kept only for reference/rollback. All active work is under `src/`.
 Vite is pinned to `^7` (Vite 8's Rolldown bundler has known install issues on
 Windows) — check that carefully before bumping.
 
+`npm test` only covers pure logic (math, tuning, AI decisions) — nothing
+renders or runs the real game loop. To actually verify a gameplay/scenario/
+render change, drive the real app in a browser; see
+**`.claude/skills/verify/SKILL.md`** for the recipe (headless Playwright,
+menu automation, a temporary debug hook for reading live `Ship`/
+`ScenarioRuntime` state, and gotchas around scripting the Newtonian flight
+model).
+
 ## File map
 
 ```
