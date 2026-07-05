@@ -69,15 +69,31 @@ export function initScenarioMenu(h: ScenarioMenuHandlers): void {
   showPicker();
 }
 
-export function showScenarioResult(outcome: 'won' | 'lost', config: ScenarioConfig): void {
+export function showScenarioResult(
+  outcome: 'won' | 'lost',
+  config: ScenarioConfig,
+  failReason?: 'died' | 'missedGate' | 'timeout'
+): void {
   picker.style.display = 'none';
   resultEl.style.display = 'block';
   resultEl.className = outcome;
 
-  const title = outcome === 'won' ? 'TARGET DESTROYED' : 'YOU WERE DESTROYED';
-  const detail = outcome === 'won'
-    ? `${config.name} — training complete.`
-    : `${config.name} — you took ${config.hitsToKillPlayer} hits.`;
+  const isGates = config.winCondition === 'gates';
+  let title: string;
+  let detail: string;
+  if (outcome === 'won') {
+    title = isGates ? 'MANEUVER COMPLETE' : 'TARGET DESTROYED';
+    detail = `${config.name} — training complete.`;
+  } else if (failReason === 'missedGate') {
+    title = 'GATE MISSED';
+    detail = `${config.name} — flew past a gate outside its ring.`;
+  } else if (failReason === 'timeout') {
+    title = 'TIME EXPIRED';
+    detail = `${config.name} — didn't clear the course in time.`;
+  } else {
+    title = 'YOU WERE DESTROYED';
+    detail = `${config.name} — you took ${config.hitsToKillPlayer} hits.`;
+  }
   resultEl.innerHTML = `<h2>${title}</h2><p style="color:var(--hud-dim)">${detail}</p>`;
 
   const retryBtn = document.createElement('button');

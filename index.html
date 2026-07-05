@@ -37,8 +37,10 @@
 
   <div class="panel" id="scenario-hud" style="display:none">
     <div id="scenario-hud-name" style="color:var(--accent); margin-bottom:4px;"></div>
-    <div class="row"><span class="label">TARGET HITS</span><span class="value" id="scenario-hud-enemy-hits">0/0</span></div>
+    <div class="row" id="scenario-hud-enemy-row"><span class="label">TARGET HITS</span><span class="value" id="scenario-hud-enemy-hits">0/0</span></div>
     <div class="row"><span class="label">YOUR HITS</span><span class="value" id="scenario-hud-player-hits">0/0</span></div>
+    <div class="row" id="scenario-hud-gate-row" style="display:none"><span class="label">GATE</span><span class="value" id="scenario-hud-gate">0/0</span></div>
+    <div class="row" id="scenario-hud-timer-row" style="display:none"><span class="label">TIME LEFT</span><span class="value" id="scenario-hud-timer">0.0s</span></div>
   </div>
 
   <div class="panel" id="stats">

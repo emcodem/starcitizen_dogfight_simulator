@@ -3,6 +3,7 @@ import type { ScenarioConfig, ScenarioRuntime } from './types';
 import { createHealth } from '../combat/health';
 import { resolveHits } from '../combat/hitDetection';
 import * as FighterAI from '../combat/enemyAI';
+import { evaluateGateCrossing } from './gatePath';
 import { projectiles, spawnProjectileFrom, WEAPON } from '../world/weapons';
 import { computeAxes, lookAtQuat, rotateTowards } from '../math/quaternion';
 import { integrateFlight, resolveBoost } from '../physics/flightModel';
@@ -29,14 +30,42 @@ export function startScenario(config: ScenarioConfig, player: Ship): ScenarioRun
       : undefined,
     fireCooldown: 0
   }));
-  return { config, enemies, outcome: 'active' };
+  return { config, enemies, outcome: 'active', elapsedSec: 0, gateIndex: 0 };
 }
 
 export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: number): void {
   if (runtime.outcome !== 'active') return;
+  runtime.elapsedSec += dt;
 
   for (const enemy of runtime.enemies) {
     if (enemy.health.points <= 0) continue;
+
+    if (enemy.behavior === 'chaser') {
+      const decision = FighterAI.chaserThink(enemy, player);
+      const boost = resolveBoost(enemy.type, enemy.boostMeter, decision.boostRequested, dt);
+      enemy.boostMeter = boost.boostMeter;
+      enemy.boosting = boost.boosting;
+      integrateFlight(enemy, decision.inputs, dt);
+
+      enemy.fireCooldown -= dt;
+      if (decision.wantsToFire && enemy.fireCooldown <= 0) {
+        // re-check aim post-rotation — see canFireWithinTolerance's doc comment for why.
+        const { forward, right, up } = computeAxes(enemy.quat);
+        const dist = Math.hypot(
+          player.pos.x - enemy.pos.x,
+          player.pos.y - enemy.pos.y,
+          player.pos.z - enemy.pos.z
+        );
+        if (FighterAI.canFireWithinTolerance(
+          forward, decision.aimDir, dist,
+          FighterAI.CHASER_TUNING.fireRange, FighterAI.CHASER_TUNING.fireLateralTolerance
+        )) {
+          spawnProjectileFrom(enemy.pos, enemy.vel, forward, right, up, 'enemy');
+          enemy.fireCooldown = 1 / WEAPON.fireRate;
+        }
+      }
+      continue;
+    }
 
     if (enemy.behavior === 'fighter' && enemy.ai) {
       const decision = FighterAI.think(enemy, enemy.ai, player, dt);
@@ -92,7 +121,30 @@ export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: numbe
 
   if (player.health && player.health.points <= 0) {
     runtime.outcome = 'lost';
-  } else if (runtime.enemies.every(e => e.health.points <= 0)) {
-    runtime.outcome = 'won';
+    runtime.failReason = 'died';
+  } else if (runtime.config.winCondition === 'destroy') {
+    if (runtime.enemies.every(e => e.health.points <= 0)) runtime.outcome = 'won';
+  } else {
+    // 'gates' — advance/fail against the current target gate, then check the course-complete /
+    // timeout conditions. Order matters: a gate clear on the final gate should win immediately,
+    // not fall through to a timeout check that never gets the chance to matter.
+    const gates = runtime.config.gatePath ?? [];
+    const gate = gates[runtime.gateIndex];
+    if (gate) {
+      const crossing = evaluateGateCrossing(player.pos, gate);
+      if (crossing === 'cleared') runtime.gateIndex++;
+      else if (crossing === 'missed') {
+        runtime.outcome = 'lost';
+        runtime.failReason = 'missedGate';
+      }
+    }
+    if (runtime.outcome === 'active') {
+      if (runtime.gateIndex >= gates.length) {
+        runtime.outcome = 'won';
+      } else if (runtime.config.surviveDurationSec !== undefined && runtime.elapsedSec > runtime.config.surviveDurationSec) {
+        runtime.outcome = 'lost';
+        runtime.failReason = 'timeout';
+      }
+    }
   }
 }

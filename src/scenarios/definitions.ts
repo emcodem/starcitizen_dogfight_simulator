@@ -2,6 +2,7 @@ import { SHIP_TYPES } from '../ship/shipTypes';
 import { deriveShipType } from '../ship/deriveShipType';
 import { lookAtQuat } from '../math/quaternion';
 import { FIGHTER_TUNING_ACE, FIGHTER_TUNING_ROOKIE } from '../combat/enemyAI';
+import { buildBarrelRollGatePath } from './gatePath';
 import type { ScenarioConfig } from './types';
 
 // Half turn rate opponent for the drill — same Gladius stats otherwise, so it feels like a real
@@ -31,7 +32,8 @@ export const SCENARIOS: ScenarioConfig[] = [
     ],
     hitsToKillEnemy: 50,
     hitsToKillPlayer: 50,
-    includeStation: false
+    includeStation: false,
+    winCondition: 'destroy'
   },
   {
     id: 'fighter-intercept-rookie',
@@ -49,7 +51,8 @@ export const SCENARIOS: ScenarioConfig[] = [
     ],
     hitsToKillEnemy: 50,
     hitsToKillPlayer: 50,
-    includeStation: false
+    includeStation: false,
+    winCondition: 'destroy'
   },
   {
     id: 'fighter-intercept-ace',
@@ -67,6 +70,52 @@ export const SCENARIOS: ScenarioConfig[] = [
     ],
     hitsToKillEnemy: 50,
     hitsToKillPlayer: 50,
-    includeStation: false
+    includeStation: false,
+    winCondition: 'destroy'
+  },
+  {
+    id: 'barrel-roll-escape-turret',
+    name: 'Barrel Roll — Escape the Turret (Easy)',
+    description:
+      'A stationary Gladius turret has you in its sights. Fly the marked gate path — a barrel-roll break — to open distance and clear its firing arc before time runs out.',
+    enemySpawns: [
+      {
+        type: SHIP_TYPES[0],
+        pos: { x: 150, y: 0, z: 500 },
+        quat: { x: 0, y: 0, z: 0, w: 1 },
+        behavior: 'turret',
+        turnRateRadPerSec: SHIP_TYPES[0].maxAngVel.yaw
+      }
+    ],
+    hitsToKillEnemy: 30,
+    hitsToKillPlayer: 20,
+    includeStation: false,
+    winCondition: 'gates',
+    gatePath: buildBarrelRollGatePath({
+      startZ: 250, gateCount: 6, spacingZ: 180, turns: 1, rollRadius: 70, gateRadius: 50
+    }),
+    surviveDurationSec: 30
+  },
+  {
+    id: 'barrel-roll-evade-chaser',
+    name: 'Barrel Roll — Shake a Tail (Medium)',
+    description:
+      'A Gladius has locked onto your six and won\'t let go. Fly the marked gate path to barrel-roll clear of its guns before it wears you down.',
+    enemySpawns: [
+      {
+        type: SHIP_TYPES[0],
+        pos: { x: 0, y: 0, z: -150 },
+        quat: { x: 0, y: 0, z: 0, w: 1 },
+        behavior: 'chaser'
+      }
+    ],
+    hitsToKillEnemy: 30,
+    hitsToKillPlayer: 20,
+    includeStation: false,
+    winCondition: 'gates',
+    gatePath: buildBarrelRollGatePath({
+      startZ: 250, gateCount: 8, spacingZ: 150, turns: 1, rollRadius: 90, gateRadius: 38
+    }),
+    surviveDurationSec: 35
   }
 ];

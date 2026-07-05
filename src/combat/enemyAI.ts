@@ -81,9 +81,19 @@ export interface FighterDecision {
 // orientation AFTER this tick's integrateFlight call (see scenarios/runtime.ts) — checking against
 // the pre-rotation orientation would let a shot fire "aimed" at a direction the nose has already
 // rotated past by the time the projectile actually leaves the muzzle.
+export function canFireWithinTolerance(
+  forward: Vec3,
+  aimDir: Vec3,
+  dist: number,
+  fireRange: number,
+  fireLateralTolerance: number
+): boolean {
+  if (dist > fireRange) return false;
+  return dist * Math.tan(angleBetween(forward, aimDir)) <= fireLateralTolerance;
+}
+
 export function canFire(forward: Vec3, aimDir: Vec3, dist: number, tuning: FighterTuning): boolean {
-  if (dist > tuning.fireRange) return false;
-  return dist * Math.tan(angleBetween(forward, aimDir)) <= tuning.fireLateralTolerance;
+  return canFireWithinTolerance(forward, aimDir, dist, tuning.fireRange, tuning.fireLateralTolerance);
 }
 
 // Proportional steering: how hard to push pitch/yaw/roll to turn `current` toward facing `dir`.
@@ -245,6 +255,63 @@ export function think(enemy: EnemyShip, ai: FighterAIMemory, player: Ship, dt: n
     },
     boostRequested,
     wantsToFire,
+    aimDir
+  };
+}
+
+// ===========================================================================
+// ChaserAI — the 'chaser' EnemyShip behavior, used by the evasion drills (see
+// scenarios/definitions.ts). Unlike FighterAI there's no state machine: it always just flies to
+// hold a fixed offset directly behind the player and fires when boresighted. It deliberately never
+// disengages or repositions — the player's job is to break its aim (e.g. by flying a barrel-roll
+// gate path), not to out-fight it.
+// ===========================================================================
+export const CHASER_TUNING = {
+  standoffDistance: 130, // meters directly behind the player it tries to hold station at
+  steerGain: 5,
+  fireRange: 450,
+  fireLateralTolerance: 8
+};
+
+export function chaserThink(enemy: EnemyShip, player: Ship): FighterDecision {
+  const { forward: playerForward } = computeAxes(player.quat);
+  const stationPoint: Vec3 = {
+    x: player.pos.x - playerForward.x * CHASER_TUNING.standoffDistance,
+    y: player.pos.y - playerForward.y * CHASER_TUNING.standoffDistance,
+    z: player.pos.z - playerForward.z * CHASER_TUNING.standoffDistance
+  };
+  const toStation: Vec3 = {
+    x: stationPoint.x - enemy.pos.x,
+    y: stationPoint.y - enemy.pos.y,
+    z: stationPoint.z - enemy.pos.z
+  };
+  const distToStation = Math.hypot(toStation.x, toStation.y, toStation.z);
+  const steerDir = distToStation > 1 ? normalize(toStation) : playerForward;
+
+  const toPlayer: Vec3 = {
+    x: player.pos.x - enemy.pos.x,
+    y: player.pos.y - enemy.pos.y,
+    z: player.pos.z - enemy.pos.z
+  };
+  const dist = Math.hypot(toPlayer.x, toPlayer.y, toPlayer.z) || 1;
+  const aimDir = normalize(toPlayer);
+
+  const steer = steeringToward(enemy.quat, steerDir, CHASER_TUNING.steerGain);
+  const { forward: enemyForward } = computeAxes(enemy.quat);
+
+  return {
+    inputs: {
+      throttle: clamp(distToStation / 150, 0.15, 1),
+      pitch: steer.pitch,
+      yaw: steer.yaw,
+      roll: steer.roll,
+      strafeX: 0,
+      strafeY: 0,
+      brake: false,
+      decoupled: false
+    },
+    boostRequested: distToStation > 350,
+    wantsToFire: dist <= CHASER_TUNING.fireRange && angleBetween(enemyForward, aimDir) < 0.3,
     aimDir
   };
 }

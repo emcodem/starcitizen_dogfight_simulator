@@ -65,7 +65,8 @@ export interface Health {
 
 export type EnemyBehavior =
   | 'turret'  // stationary, just rotates in place to track and fire — see scenarios/runtime.ts
-  | 'fighter'; // full Newtonian flight, driven by combat/enemyAI.ts through physics/flightModel.ts
+  | 'fighter' // full Newtonian flight, driven by combat/enemyAI.ts through physics/flightModel.ts
+  | 'chaser'; // holds station behind the player and fires — see combat/enemyAI.ts chaserThink
 
 // Difficulty knobs for the 'fighter' behavior (see combat/enemyAI.ts for how each is used, and its
 // FIGHTER_TUNING_ACE / FIGHTER_TUNING_ROOKIE presets). Defined here rather than in enemyAI.ts so

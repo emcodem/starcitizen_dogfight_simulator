@@ -65,7 +65,7 @@ function loop(now: number): void {
         updateScenario(activeRuntime, ship, dt);
         if (activeRuntime.outcome !== 'active') {
           mode = 'menu';
-          showScenarioResult(activeRuntime.outcome, activeRuntime.config);
+          showScenarioResult(activeRuntime.outcome, activeRuntime.config, activeRuntime.failReason);
         }
       }
       render(ship, activeRuntime);

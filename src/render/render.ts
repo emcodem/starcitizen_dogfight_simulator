@@ -174,6 +174,41 @@ function drawPip(ship: Ship, scenario: ScenarioRuntime, cam: Camera): void {
   ctx.stroke();
 }
 
+// "Fly through this ring" gate-path overlay for the barrel-roll evasion drills. Draws a projected
+// circle at each remaining gate — bright for the current target, dim for the couple ahead of it —
+// so the player has both a spatial and a sequential guide for the maneuver. Cleared gates are
+// simply skipped, not drawn.
+function drawGatePath(scenario: ScenarioRuntime, cam: Camera): void {
+  const gates = scenario.config.gatePath;
+  if (!gates) return;
+  const SEGMENTS = 24;
+  const MAX_GATES_SHOWN = 3; // only render the current gate + a couple ahead, to avoid clutter
+
+  for (let i = scenario.gateIndex; i < Math.min(gates.length, scenario.gateIndex + MAX_GATES_SHOWN); i++) {
+    const gate = gates[i];
+    const isActive = i === scenario.gateIndex;
+    const { right, up } = computeAxes(gate.quat);
+
+    const ring: Vec3[] = [];
+    for (let s = 0; s < SEGMENTS; s++) {
+      const a = (s / SEGMENTS) * Math.PI * 2;
+      const cosA = Math.cos(a) * gate.radius, sinA = Math.sin(a) * gate.radius;
+      ring.push({
+        x: gate.pos.x + right.x * cosA + up.x * sinA,
+        y: gate.pos.y + right.y * cosA + up.y * sinA,
+        z: gate.pos.z + right.z * cosA + up.z * sinA
+      });
+    }
+
+    ctx.strokeStyle = isActive ? '#7ad1ff' : 'rgba(122,209,255,0.3)';
+    ctx.lineWidth = isActive ? 2.2 : 1;
+    for (let s = 0; s < SEGMENTS; s++) {
+      const p1 = ring[s], p2 = ring[(s + 1) % SEGMENTS];
+      drawLine3D(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z, cam);
+    }
+  }
+}
+
 // General-purpose hit feedback — not scenario-specific, just reacts to ship.hitFlash (set by
 // combat/hitDetection.ts on any confirmed hit against the player, decayed in physics/step.ts).
 // Deliberately subtle: a quick cue, not a distraction from flying.
@@ -231,10 +266,25 @@ function updateHUD(ship: Ship, scenario: ScenarioRuntime | null): void {
   if (scenario) {
     scenarioHud.style.display = 'block';
     document.getElementById('scenario-hud-name')!.textContent = scenario.config.name;
-    const enemy = scenario.enemies[0];
-    const enemyHits = enemy ? enemy.health.maxPoints - enemy.health.points : 0;
-    const enemyMax = enemy ? enemy.health.maxPoints : 0;
-    document.getElementById('scenario-hud-enemy-hits')!.textContent = `${enemyHits}/${enemyMax}`;
+
+    const isGates = scenario.config.winCondition === 'gates';
+    (document.getElementById('scenario-hud-enemy-row') as HTMLElement).style.display = isGates ? 'none' : 'flex';
+    (document.getElementById('scenario-hud-gate-row') as HTMLElement).style.display = isGates ? 'flex' : 'none';
+    (document.getElementById('scenario-hud-timer-row') as HTMLElement).style.display = isGates ? 'flex' : 'none';
+
+    if (isGates) {
+      const gateTotal = scenario.config.gatePath?.length ?? 0;
+      document.getElementById('scenario-hud-gate')!.textContent =
+        `${Math.min(scenario.gateIndex + 1, gateTotal)}/${gateTotal}`;
+      const remaining = Math.max(0, (scenario.config.surviveDurationSec ?? 0) - scenario.elapsedSec);
+      document.getElementById('scenario-hud-timer')!.textContent = `${remaining.toFixed(1)}s`;
+    } else {
+      const enemy = scenario.enemies[0];
+      const enemyHits = enemy ? enemy.health.maxPoints - enemy.health.points : 0;
+      const enemyMax = enemy ? enemy.health.maxPoints : 0;
+      document.getElementById('scenario-hud-enemy-hits')!.textContent = `${enemyHits}/${enemyMax}`;
+    }
+
     const playerHits = ship.health ? ship.health.maxPoints - ship.health.points : 0;
     const playerMax = ship.health ? ship.health.maxPoints : 0;
     document.getElementById('scenario-hud-player-hits')!.textContent = `${playerHits}/${playerMax}`;
@@ -347,6 +397,9 @@ export function render(ship: Ship, scenario: ScenarioRuntime | null = null): voi
 
   // predicted-impact-point — only within PIP_RANGE of a live target
   if (scenario) drawPip(ship, scenario, cam);
+
+  // barrel-roll gate path overlay, for evasion drills
+  if (scenario) drawGatePath(scenario, cam);
 
   // subtle red flash whenever the player takes a hit — general feedback, any scenario
   drawHitFlash(ship);
