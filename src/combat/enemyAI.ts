@@ -340,33 +340,69 @@ function randRange(min: number, max: number): number {
   return min + Math.random() * (max - min);
 }
 
-// Occasional barrel roll, purely cosmetic — layered on top of orbiter/drifter's velocity-facing
-// orientation so the drills read as "flying," not just as targets sliding along a track. Shared by
-// orbiterThink/driftThink via their respective (structurally identical) roll fields.
+// Occasional barrel roll, purely cosmetic — a real barrel roll isn't just spinning in place, it's
+// holding a constant "up-strafe" while rolling, so as the roll turns that thrust through a full
+// circle the flight path corkscrews sideways around the original line of travel before rejoining
+// it. We reproduce that kinematically: `offset` traces a circle in the plane perpendicular to the
+// direction of travel *at roll-start* (fixed for the whole maneuver, not re-rotated with the
+// drone's own spin — re-rotating it would just cancel back out to spinning in place), parameterized
+// by the same roll angle used to spin the model, so the corkscrew and the visual roll stay in sync.
+// The circle starts and ends at zero offset (cos(0)-1=0, sin(0)=0 ... same at 2π), so it blends
+// into and out of the base flight path with no positional pop. Shared by orbiterThink/driftThink
+// via their respective (structurally identical) roll fields.
 const BARREL_ROLL_DURATION = 1.1;              // seconds for a full 360
 const BARREL_ROLL_TRIGGER_CHANCE_PER_SEC = 0.08; // ~once every dozen-ish seconds of eligible flight
 const BARREL_ROLL_COOLDOWN = 4;                // seconds before another roll may trigger
+const BARREL_ROLL_RADIUS = 15;                 // meters — lateral sweep of the corkscrew
 
-// Advances a drone's roll state by dt and returns the roll angle (radians, about the local forward
-// axis) to apply this tick — 0 while not rolling. Mutates `state` in place.
-function advanceBarrelRoll(state: { rollTimer?: number; rollCooldown?: number }, dt: number): number {
+interface BarrelRollState {
+  rollTimer?: number;
+  rollCooldown?: number;
+  rollAxisRight?: Vec3;
+  rollAxisUp?: Vec3;
+}
+
+interface BarrelRollResult {
+  angle: number;  // radians about the local forward axis to apply this tick — 0 while not rolling
+  offset: Vec3;   // world-space corkscrew displacement to apply this tick, on top of the base flight path
+}
+
+// Advances a drone's roll state by dt. Mutates `state` in place. `axes` should be the drone's
+// current (un-rolled) forward-facing orientation, i.e. computeAxes(lookAtQuat(vel)) — its
+// right/up are captured as the corkscrew's fixed reference frame the moment a new roll triggers.
+function advanceBarrelRoll(state: BarrelRollState, axes: { right: Vec3; up: Vec3 }, dt: number): BarrelRollResult {
   let rollTimer = state.rollTimer ?? 0;
   let rollCooldown = state.rollCooldown ?? 0;
 
   if (rollTimer > 0) {
     rollTimer = Math.max(0, rollTimer - dt);
-    state.rollTimer = rollTimer;
-    return (1 - rollTimer / BARREL_ROLL_DURATION) * Math.PI * 2;
-  }
-
-  rollCooldown -= dt;
-  if (rollCooldown <= 0 && Math.random() < BARREL_ROLL_TRIGGER_CHANCE_PER_SEC * dt) {
-    rollTimer = BARREL_ROLL_DURATION;
-    rollCooldown = BARREL_ROLL_COOLDOWN;
+  } else {
+    rollCooldown -= dt;
+    if (rollCooldown <= 0 && Math.random() < BARREL_ROLL_TRIGGER_CHANCE_PER_SEC * dt) {
+      rollTimer = BARREL_ROLL_DURATION;
+      rollCooldown = BARREL_ROLL_COOLDOWN;
+      state.rollAxisRight = axes.right;
+      state.rollAxisUp = axes.up;
+    }
   }
   state.rollTimer = rollTimer;
   state.rollCooldown = rollCooldown;
-  return 0;
+
+  if (rollTimer <= 0 || !state.rollAxisRight || !state.rollAxisUp) {
+    return { angle: 0, offset: { x: 0, y: 0, z: 0 } };
+  }
+  const angle = (1 - rollTimer / BARREL_ROLL_DURATION) * Math.PI * 2;
+  const { rollAxisRight: right, rollAxisUp: up } = state;
+  const cosTerm = BARREL_ROLL_RADIUS * (Math.cos(angle) - 1);
+  const sinTerm = BARREL_ROLL_RADIUS * Math.sin(angle);
+  return {
+    angle,
+    offset: {
+      x: cosTerm * up.x + sinTerm * right.x,
+      y: cosTerm * up.y + sinTerm * right.y,
+      z: cosTerm * up.z + sinTerm * right.z
+    }
+  };
 }
 
 // Rotation-only quaternion about the local forward axis (+Z in computeAxes' base convention) — the
@@ -430,8 +466,15 @@ export function orbiterThink(enemy: EnemyShip, player: Ship, dt: number): void {
     z: player.vel.z + tangential * (-sinP * r.z + cosP * u.z)
   };
   enemy.quat = lookAtQuat(enemy.vel);
-  const rollAngle = advanceBarrelRoll(orbit, dt);
-  if (rollAngle > 0) enemy.quat = quatMultiply(enemy.quat, rollQuat(rollAngle));
+  // pos/vel above are fully recomputed from the orbit formula every tick (not integrated), so the
+  // corkscrew offset can just be added on top here with no delta-tracking against last tick's value
+  const roll = advanceBarrelRoll(orbit, computeAxes(enemy.quat), dt);
+  if (roll.angle > 0) {
+    enemy.quat = quatMultiply(enemy.quat, rollQuat(roll.angle));
+    enemy.pos.x += roll.offset.x;
+    enemy.pos.y += roll.offset.y;
+    enemy.pos.z += roll.offset.z;
+  }
 }
 
 export function spawnDriftState(player: Ship, aggressiveness: number = 0.5): { pos: Vec3; vel: Vec3 } {
@@ -473,8 +516,20 @@ export function driftThink(enemy: EnemyShip, player: Ship, dt: number): boolean 
   };
   enemy.quat = lookAtQuat(enemy.vel);
   if (enemy.drift) {
-    const rollAngle = advanceBarrelRoll(enemy.drift, dt);
-    if (rollAngle > 0) enemy.quat = quatMultiply(enemy.quat, rollQuat(rollAngle));
+    const roll = advanceBarrelRoll(enemy.drift, computeAxes(enemy.quat), dt);
+    if (roll.angle > 0) {
+      // pos here is integrated incrementally tick-to-tick (unlike the orbiter's from-scratch
+      // recompute), so last tick's offset is already baked in — apply only the delta so the
+      // corkscrew doesn't compound on top of itself
+      const prev = enemy.drift.rollOffsetPrev ?? { x: 0, y: 0, z: 0 };
+      enemy.pos.x += roll.offset.x - prev.x;
+      enemy.pos.y += roll.offset.y - prev.y;
+      enemy.pos.z += roll.offset.z - prev.z;
+      enemy.drift.rollOffsetPrev = roll.offset;
+      enemy.quat = quatMultiply(enemy.quat, rollQuat(roll.angle));
+    } else {
+      enemy.drift.rollOffsetPrev = undefined;
+    }
   }
   const dist = Math.hypot(enemy.pos.x - player.pos.x, enemy.pos.y - player.pos.y, enemy.pos.z - player.pos.z);
   return dist > DRIFTER_TUNING.despawnDist;

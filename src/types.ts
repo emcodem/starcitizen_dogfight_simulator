@@ -80,8 +80,10 @@ export interface OrbitState {
   planeRight: Vec3;
   planeUp: Vec3;
   respawnTimer: number;  // elapsed seconds since death, 0 while alive — see scenarios/runtime.ts
-  rollTimer?: number;    // seconds remaining in an active barrel-roll maneuver, undefined/0 = not rolling
-  rollCooldown?: number; // seconds until eligible to trigger another barrel roll — see enemyAI.ts
+  rollTimer?: number;      // seconds remaining in an active barrel-roll maneuver, undefined/0 = not rolling
+  rollCooldown?: number;   // seconds until eligible to trigger another barrel roll — see enemyAI.ts
+  rollAxisRight?: Vec3;    // corkscrew's fixed right/up basis, captured when a roll triggers — see
+  rollAxisUp?: Vec3;       // enemyAI.ts's advanceBarrelRoll
 }
 
 // Per-enemy state for the 'drifter' behavior — ballistic straight-line flight, no steering.
@@ -89,6 +91,11 @@ export interface DriftState {
   respawnTimer: number; // elapsed seconds since death, 0 while alive — see scenarios/runtime.ts
   rollTimer?: number;    // see OrbitState.rollTimer
   rollCooldown?: number; // see OrbitState.rollCooldown
+  rollAxisRight?: Vec3;  // see OrbitState.rollAxisRight/rollAxisUp
+  rollAxisUp?: Vec3;
+  rollOffsetPrev?: Vec3; // last tick's applied corkscrew offset — pos here is integrated
+                         // incrementally (unlike the orbiter's from-scratch recompute), so this is
+                         // needed to apply only the delta each tick instead of compounding it
 }
 
 // Difficulty knobs for the 'fighter' behavior (see combat/enemyAI.ts for how each is used, and its

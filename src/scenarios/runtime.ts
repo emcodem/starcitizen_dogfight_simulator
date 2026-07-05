@@ -160,6 +160,12 @@ export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: numbe
         enemy.pos = s.pos;
         enemy.vel = s.vel;
         enemy.quat = lookAtQuat(s.vel);
+        // if it teleported mid-barrel-roll, don't let the corkscrew continue around its old (now
+        // stale) flight-direction frame at the new spawn point — see the health-respawn branch above
+        if (enemy.drift) {
+          enemy.drift.rollTimer = 0;
+          enemy.drift.rollCooldown = 0;
+        }
       }
       continue;
     }
