@@ -76,13 +76,16 @@ export function step(ship: Ship, dt: number, activeRuntime: ScenarioRuntime | nu
   pitchInput += mouseInput.pitch;
   yawInput += mouseInput.yaw;
 
-  // --- ESP: dampen the already-combined pitch/yaw once the crosshair nears the active PIP ---
+  // --- ESP: dampen the already-combined pitch/yaw once the crosshair nears the active PIP, but
+  // only while the stick itself is also near center — see espAssist.ts's dampingFactor doc ---
   if (activeRuntime) {
     const cam = { pos: ship.pos, axes: computeAxes(ship.quat) };
     const pip = findActivePip(ship.pos, ship.vel, cam, activeRuntime.enemies, window.innerWidth, window.innerHeight);
     if (pip) {
       const screenDist = Math.hypot(pip.screenX - window.innerWidth / 2, pip.screenY - window.innerHeight / 2);
-      const factor = EspAssist.dampingFactorForDistance(screenDist);
+      const stickOffset = MouseLook.getOffset();
+      const stickDist = Math.hypot(stickOffset.x, stickOffset.y);
+      const factor = EspAssist.dampingFactor(screenDist, stickDist);
       pitchInput *= factor;
       yawInput *= factor;
     }

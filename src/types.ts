@@ -35,6 +35,11 @@ export interface ShipType {
   boostRechargeRate: number;        // meter-seconds recovered per real second while not boosting
   boostMaxAngVel: AngularState;     // rotation-rate cap while boosting
   boostAngularThrust: AngularState; // == boostMaxAngVel * angularDrag per axis — same derivation as angularThrust
+  // main/retro thrust while boosting — == boostSpeedForward/Back * linearDrag * mass, so continuous
+  // boost thrust actually converges to the documented boosted top speed under drag instead of just
+  // raising the speed cap without the thrust to ever reach it (same derivation as angularThrust).
+  // No boosted strafe/vertical — real SC's afterburner only affects the main engine.
+  boostLinearThrust: { main: number; retro: number };
   hullRadius: number;                // sphere radius (m) used for hit detection and hull silhouette drawing
 }
 

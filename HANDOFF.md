@@ -157,8 +157,16 @@ mode has none of that, so you coast freely on whatever velocity you have
 limiter, though, is **not** part of that drag and applies in both modes —
 decoupling lets you fly without your nose needing to point along your
 velocity vector, it doesn't let you exceed SCM speed; a decoupled boost can
-push past `scmSpeed` same as a coupled one, but the moment boost ends, speed
-snaps straight back down to `scmSpeed` even with no drag to carry it there.
+push past `scmSpeed` same as a coupled one. When over cap (typically: right
+after a boost ends and the cap drops out from under you), speed bleeds back
+down at the ship's own thrust rate — same mechanism as the space brake, see
+below — rather than snapping to the cap in a single frame; a boost wearing
+off should feel like a deceleration, not a teleport. `boostLinearThrust`
+(main/retro) exists specifically so boosting also *accelerates* the ship,
+not just raises the cap — plain `linearThrust` is tuned so drag settles the
+ship at exactly `scmSpeed`, so without boosted thrust the ship could never
+climb to a speed where the higher cap would even matter (same derivation as
+`angularThrust`/`boostAngularThrust`, guarded by `tests/shipTuning.test.ts`).
 `spaceBrakeOn` is hold-to-brake — recomputed every tick from
 `isActive('spaceBrake')` OR a held joystick button, NOT a toggle (unlike
 `decoupled`, which is a real edge-triggered toggle) — and the passive drag

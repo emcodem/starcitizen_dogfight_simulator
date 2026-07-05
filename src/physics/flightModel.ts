@@ -62,7 +62,13 @@ export function integrateFlight(body: FlightBody, input: FlightInputs, dt: numbe
   const strafeY = clamp(input.strafeY, -1, 1);
   const throttle = clamp(input.throttle, -1, 1);
 
-  const mainThrustMag = throttle >= 0 ? throttle * t.linearThrust.main : throttle * t.linearThrust.retro;
+  // boosting raises main/retro thrust the same way it raises angular thrust above — without this,
+  // boosting only lifted the speed *cap* while leaving thrust unchanged, and since linearDrag
+  // makes unboosted thrust settle at exactly scmSpeed by construction, the ship could never
+  // actually climb to a speed where the higher cap mattered.
+  const mainThrust = body.boosting ? t.boostLinearThrust.main : t.linearThrust.main;
+  const retroThrust = body.boosting ? t.boostLinearThrust.retro : t.linearThrust.retro;
+  const mainThrustMag = throttle >= 0 ? throttle * mainThrust : throttle * retroThrust;
   const accel: Vec3 = { x: 0, y: 0, z: 0 };
   addScaled(accel, forward, mainThrustMag / t.mass);
   addScaled(accel, right, (strafeX * t.linearThrust.strafe) / t.mass);
@@ -110,19 +116,31 @@ export function integrateFlight(body: FlightBody, input: FlightInputs, dt: numbe
     body.vel.z -= body.vel.z * drag * dt;
   }
 
-  // Flight computer speed limiter: hard-caps velocity at SCM speed (or the ship's separate, lower
+  // Flight computer speed limiter: caps velocity at SCM speed (or the ship's separate, lower
   // reverse-speed cap when actually flying backward relative to its own nose), raised to the
   // ship's (directional) boost speed while boosting. Enforced regardless of decoupled — in SC,
   // decoupling removes the auto-damping that kills your drift when you let go of the stick, but
-  // it does NOT let you exceed SCM/boost speed; the instant a boost ends, speed still snaps back
-  // down to the normal (non-boosted) cap even while decoupled.
+  // it does NOT let you exceed SCM/boost speed. When over cap, speed bleeds down at a bounded
+  // rate rather than snapping to the cap in a single frame — a boost wearing off should feel like
+  // a deceleration, not a teleport — but that bound must be at least as strong as whatever thrust
+  // is actively still feeding the overspeed (e.g. continuing to hold boost right at boostSpeedForward),
+  // or thrust stronger than the natural bleed rate would just outrun it and blow through the cap
+  // every tick instead of being governed by it. Falls back to the ship's natural thrust-based decel
+  // (same mechanism as the space brake above) once nothing is actively pushing against it, e.g.
+  // right after a boost ends with no throttle held.
   const forwardSpeed = body.vel.x * forward.x + body.vel.y * forward.y + body.vel.z * forward.z;
   const speedCap = body.boosting
     ? (forwardSpeed >= 0 ? t.boostSpeedForward : t.boostSpeedBack)
     : (forwardSpeed >= 0 ? t.scmSpeed : t.scmSpeedBack);
   const speed = Math.hypot(body.vel.x, body.vel.y, body.vel.z);
   if (speed > speedCap) {
-    const scale = speedCap / speed;
+    const velUnit = { x: body.vel.x / speed, y: body.vel.y / speed, z: body.vel.z / speed };
+    const accelAlongVel = accel.x * velUnit.x + accel.y * velUnit.y + accel.z * velUnit.z;
+    const naturalBleedRate = (forwardSpeed >= 0 ? t.linearThrust.retro : t.linearThrust.main) / t.mass;
+    const decelRate = Math.max(naturalBleedRate, accelAlongVel);
+    const maxDelta = decelRate * dt;
+    const newSpeed = Math.max(speedCap, speed - maxDelta);
+    const scale = newSpeed / speed;
     body.vel.x *= scale;
     body.vel.y *= scale;
     body.vel.z *= scale;

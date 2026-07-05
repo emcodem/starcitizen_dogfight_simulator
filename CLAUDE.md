@@ -96,7 +96,11 @@ computeAxes(ship.quat)`, no offset).
   made the ship look like it was flying in circles during a roll.
 - **`angularThrust == maxAngVel * angularDrag`** per axis in `shipTypes.ts` —
   steady-state target, not a clamp target. Guarded by `tests/shipTuning.test.ts`
-  and `tests/deriveShipType.test.ts`.
+  and `tests/deriveShipType.test.ts`. `boostLinearThrust == boostSpeedForward/Back
+  * linearDrag * mass` is the same invariant for boosted linear thrust — without
+  it, boosting only raises the speed cap while drag still settles unboosted
+  thrust at exactly `scmSpeed`, so the ship can never climb to a speed the
+  higher cap would matter for.
 - Keyboard, mouse-look, and joystick input combine **additively** (summed,
   clamped to [-1,1]) in `physics/step.ts` — never an override chain. Joystick
   stays fully optional this way.

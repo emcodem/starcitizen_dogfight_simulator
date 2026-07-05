@@ -12,6 +12,12 @@ import type { ShipType } from '../types';
 // is a ceiling, not a target. Deriving angularThrust this way makes full input actually converge
 // to the documented real rotation rate instead of stalling out at roughly half of it.
 //
+// boostLinearThrust is derived the same way: == boostSpeedForward/Back * linearDrag * mass, so
+// the ship actually accelerates through drag up to the documented boosted top speed. Without this,
+// boosting only raised the speed *cap* while leaving thrust unchanged — since linearDrag makes
+// unboosted thrust settle at exactly scmSpeed by construction, boosting did nothing in coupled
+// flight (the ship never reached a speed the raised cap would have mattered for).
+//
 // massKg (real mass, 48,552 kg) isn't wired into the physics yet — `mass` below is a separately
 // tuned gameplay value used for both linear thrust-to-accel and rotational inertia (see
 // physics/step.ts). Recorded here so it's available once a real mass-to-`mass` conversion (or a
@@ -34,6 +40,7 @@ export const SHIP_TYPES: ShipType[] = [
     boostRechargeRate: 0.4,
     boostMaxAngVel: { pitch: 1.431, yaw: 1.082, roll: 4.189 },
     boostAngularThrust: { pitch: 3.721, yaw: 2.813, roll: 10.891 },
+    boostLinearThrust: { main: 468, retro: 241.2 },
     hullRadius: 10 // approx half-length of a real Gladius (~22m), used for hit detection/drawing
   }
 ];

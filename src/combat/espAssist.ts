@@ -32,6 +32,18 @@ export function dampingFactorForDistance(screenDist: number): number {
   return 1 - dampeningStrength * proximity;
 }
 
+// Effective pitch/yaw damping for a tick — dampening only kicks in while BOTH the PIP and the
+// player's own stick (mouse-look's virtual joystick, or any other absolute-position input) sit
+// inside the assist circle. Gating on the stick too matters: without it, slamming the stick to
+// full deflection to snap onto a new target still got dampened the instant the PIP swept past
+// center, robbing the player of full pitch/yaw authority exactly when they threw the biggest
+// input. ESP is meant to steady fine tracking on a target you're already mostly on, not to
+// override a deliberate large input.
+export function dampingFactor(pipScreenDist: number, stickScreenDist: number): number {
+  if (stickScreenDist >= circleRadiusPx) return 1;
+  return dampingFactorForDistance(pipScreenDist);
+}
+
 interface EspConfig {
   circleRadiusPx: number;
   dampeningStrength: number;

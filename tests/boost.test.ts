@@ -3,6 +3,7 @@ import { step } from '../src/physics/step';
 import { makeShip } from '../src/ship/shipState';
 import { SHIP_TYPES } from '../src/ship/shipTypes';
 import { keys } from '../src/input/controlsModule';
+import { setStationActive } from '../src/world/station';
 
 afterEach(() => {
   // ControlsModule.keys is a module-level singleton — reset it so tests don't leak state
@@ -54,13 +55,29 @@ describe('boosted speed cap', () => {
     expect(speed).toBeGreaterThan(ship.type.scmSpeed);
   });
 
-  it('still clamps to scmSpeed when not boosting', () => {
+  it('boosted thrust actually accelerates the ship past scmSpeed in coupled mode', () => {
+    // regression guard: boosting used to only raise the speed *cap*, leaving thrust unchanged —
+    // since drag makes unboosted thrust settle at exactly scmSpeed by construction, the ship could
+    // never actually reach a speed where the higher cap mattered
+    setStationActive(false); // flying forward for 5s would otherwise crash straight into it
+    const ship = makeShip(SHIP_TYPES[0]);
+    keys['KeyW'] = true; // default strafeForward keybind — step() derives throttle from this each tick
+    keys['ShiftLeft'] = true;
+    for (let i = 0; i < 300; i++) step(ship, 1 / 60); // 5s — the full boost meter
+    setStationActive(true);
+    const speed = Math.hypot(ship.vel.x, ship.vel.y, ship.vel.z);
+    expect(speed).toBeGreaterThan(ship.type.scmSpeed);
+  });
+
+  it('bleeds excess speed back down toward scmSpeed gradually, not instantly, when not boosting', () => {
     const ship = makeShip(SHIP_TYPES[0]);
     const highSpeed = (ship.type.scmSpeed + ship.type.boostSpeedForward) / 2;
     ship.vel = { x: 0, y: 0, z: highSpeed };
     step(ship, 0.016);
     const speed = Math.hypot(ship.vel.x, ship.vel.y, ship.vel.z);
-    expect(speed).toBeLessThanOrEqual(ship.type.scmSpeed + 1e-6);
+    // a single small tick shouldn't have snapped all the way down to the cap already
+    expect(speed).toBeLessThan(highSpeed);
+    expect(speed).toBeGreaterThan(ship.type.scmSpeed);
   });
 
   it('uses the lower reverse-speed cap when flying backward relative to the ship\'s nose', () => {
@@ -68,7 +85,7 @@ describe('boosted speed cap', () => {
     // identity orientation: forward == +Z, so negative Z velocity is "backward"
     const highReverseSpeed = (ship.type.scmSpeedBack + ship.type.scmSpeed) / 2; // above scmSpeedBack, below scmSpeed
     ship.vel = { x: 0, y: 0, z: -highReverseSpeed };
-    step(ship, 0.016);
+    for (let i = 0; i < 600; i++) step(ship, 1 / 60); // let the gradual bleed-down actually reach the cap
     const speed = Math.hypot(ship.vel.x, ship.vel.y, ship.vel.z);
     expect(speed).toBeLessThanOrEqual(ship.type.scmSpeedBack + 1e-6);
   });
@@ -78,12 +95,12 @@ describe('boosted speed cap', () => {
     ship.decoupled = true;
     const highSpeed = (ship.type.scmSpeed + ship.type.boostSpeedForward) / 2;
     ship.vel = { x: 0, y: 0, z: highSpeed };
-    step(ship, 0.016); // no boost key held
+    for (let i = 0; i < 600; i++) step(ship, 1 / 60); // no boost key held; let the bleed-down finish
     const speed = Math.hypot(ship.vel.x, ship.vel.y, ship.vel.z);
     expect(speed).toBeLessThanOrEqual(ship.type.scmSpeed + 1e-6);
   });
 
-  it('lets a decoupled boost exceed scmSpeed, then snaps back to scmSpeed the instant boost ends', () => {
+  it('lets a decoupled boost exceed scmSpeed, then bleeds back down gradually — not instantly — once boost ends', () => {
     const ship = makeShip(SHIP_TYPES[0]);
     ship.decoupled = true;
     const highSpeed = (ship.type.scmSpeed + ship.type.boostSpeedForward) / 2;
@@ -94,8 +111,13 @@ describe('boosted speed cap', () => {
 
     keys['ShiftLeft'] = false;
     step(ship, 0.016);
-    const speed = Math.hypot(ship.vel.x, ship.vel.y, ship.vel.z);
-    expect(speed).toBeLessThanOrEqual(ship.type.scmSpeed + 1e-6);
+    const speedRightAfter = Math.hypot(ship.vel.x, ship.vel.y, ship.vel.z);
+    // still bleeding down, like a brake — not snapped straight to the cap in one frame
+    expect(speedRightAfter).toBeGreaterThan(ship.type.scmSpeed);
+
+    for (let i = 0; i < 600; i++) step(ship, 1 / 60); // plenty of time for the bleed-down to finish
+    const speedEventually = Math.hypot(ship.vel.x, ship.vel.y, ship.vel.z);
+    expect(speedEventually).toBeLessThanOrEqual(ship.type.scmSpeed + 1e-6);
   });
 });
 

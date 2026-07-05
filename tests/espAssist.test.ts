@@ -26,3 +26,25 @@ describe('dampingFactorForDistance', () => {
     expect(far).toBeLessThan(1);
   });
 });
+
+describe('dampingFactor (PIP + stick gate)', () => {
+  it('dampens when both the PIP and the stick are inside the circle', () => {
+    EspAssist.setCircleRadius(50);
+    EspAssist.setDampeningStrength(0.7);
+    expect(EspAssist.dampingFactor(0, 0)).toBeLessThan(1);
+  });
+
+  it('does not dampen when the stick is outside the circle, even with the PIP dead center', () => {
+    EspAssist.setCircleRadius(50);
+    EspAssist.setDampeningStrength(0.7);
+    // a full stick throw (e.g. snapping onto a new target) must keep full authority even if the
+    // PIP happens to be passing through dead center at that instant
+    expect(EspAssist.dampingFactor(0, 200)).toBe(1);
+  });
+
+  it('does not dampen when the PIP is outside the circle, even with the stick centered', () => {
+    EspAssist.setCircleRadius(50);
+    EspAssist.setDampeningStrength(0.7);
+    expect(EspAssist.dampingFactor(200, 0)).toBe(1);
+  });
+});
