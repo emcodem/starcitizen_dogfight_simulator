@@ -340,6 +340,41 @@ function randRange(min: number, max: number): number {
   return min + Math.random() * (max - min);
 }
 
+// Occasional barrel roll, purely cosmetic — layered on top of orbiter/drifter's velocity-facing
+// orientation so the drills read as "flying," not just as targets sliding along a track. Shared by
+// orbiterThink/driftThink via their respective (structurally identical) roll fields.
+const BARREL_ROLL_DURATION = 1.1;              // seconds for a full 360
+const BARREL_ROLL_TRIGGER_CHANCE_PER_SEC = 0.08; // ~once every dozen-ish seconds of eligible flight
+const BARREL_ROLL_COOLDOWN = 4;                // seconds before another roll may trigger
+
+// Advances a drone's roll state by dt and returns the roll angle (radians, about the local forward
+// axis) to apply this tick — 0 while not rolling. Mutates `state` in place.
+function advanceBarrelRoll(state: { rollTimer?: number; rollCooldown?: number }, dt: number): number {
+  let rollTimer = state.rollTimer ?? 0;
+  let rollCooldown = state.rollCooldown ?? 0;
+
+  if (rollTimer > 0) {
+    rollTimer = Math.max(0, rollTimer - dt);
+    state.rollTimer = rollTimer;
+    return (1 - rollTimer / BARREL_ROLL_DURATION) * Math.PI * 2;
+  }
+
+  rollCooldown -= dt;
+  if (rollCooldown <= 0 && Math.random() < BARREL_ROLL_TRIGGER_CHANCE_PER_SEC * dt) {
+    rollTimer = BARREL_ROLL_DURATION;
+    rollCooldown = BARREL_ROLL_COOLDOWN;
+  }
+  state.rollTimer = rollTimer;
+  state.rollCooldown = rollCooldown;
+  return 0;
+}
+
+// Rotation-only quaternion about the local forward axis (+Z in computeAxes' base convention) — the
+// same body-frame roll axis integrateOrientation uses for angVel.roll.
+function rollQuat(angleRad: number): Quat {
+  return { w: Math.cos(angleRad / 2), x: 0, y: 0, z: Math.sin(angleRad / 2) };
+}
+
 // A random axis perpendicular pair, used as the fixed orbit plane — kept stable in world space
 // (not tied to the player's facing) so the ring doesn't swing around when the player looks away.
 function randomPerpendicularPair(): { right: Vec3; up: Vec3 } {
@@ -395,6 +430,8 @@ export function orbiterThink(enemy: EnemyShip, player: Ship, dt: number): void {
     z: player.vel.z + tangential * (-sinP * r.z + cosP * u.z)
   };
   enemy.quat = lookAtQuat(enemy.vel);
+  const rollAngle = advanceBarrelRoll(orbit, dt);
+  if (rollAngle > 0) enemy.quat = quatMultiply(enemy.quat, rollQuat(rollAngle));
 }
 
 export function spawnDriftState(player: Ship, aggressiveness: number = 0.5): { pos: Vec3; vel: Vec3 } {
@@ -435,6 +472,10 @@ export function driftThink(enemy: EnemyShip, player: Ship, dt: number): boolean 
     z: enemy.pos.z + enemy.vel.z * dt
   };
   enemy.quat = lookAtQuat(enemy.vel);
+  if (enemy.drift) {
+    const rollAngle = advanceBarrelRoll(enemy.drift, dt);
+    if (rollAngle > 0) enemy.quat = quatMultiply(enemy.quat, rollQuat(rollAngle));
+  }
   const dist = Math.hypot(enemy.pos.x - player.pos.x, enemy.pos.y - player.pos.y, enemy.pos.z - player.pos.z);
   return dist > DRIFTER_TUNING.despawnDist;
 }

@@ -1,5 +1,5 @@
 import type { EnemyShip, Vec3 } from '../types';
-import { computeLeadPoint } from './leadIndicator';
+import { computeLeadPoint, wouldHitIfFiredNow } from './leadIndicator';
 import { project, type Camera } from '../render/projection';
 import { WEAPON } from '../world/weapons';
 
@@ -11,6 +11,10 @@ export interface ActivePip {
   enemy: EnemyShip;
   screenX: number;
   screenY: number;
+  // true if firing right now, with the shooter's actual current facing and both craft holding
+  // their current velocity, would land within the target's hull radius — drives the PIP's
+  // hit/no-hit color in render.ts.
+  wouldHit: boolean;
 }
 
 // Soft-lock: with multiple live enemies (e.g. the Aim Training drill's drone swarm), both the PIP
@@ -39,7 +43,12 @@ export function findActivePip(
     const screenDist = Math.hypot(p.x - cx, p.y - cy);
     if (screenDist < bestDist) {
       bestDist = screenDist;
-      best = { enemy, screenX: p.x, screenY: p.y };
+      const wouldHit = wouldHitIfFiredNow(
+        shooterPos, shooterVel, cam.axes.forward,
+        enemy.pos, enemy.vel, enemy.type.hullRadius,
+        WEAPON.muzzleSpeed, WEAPON.lifetime
+      );
+      best = { enemy, screenX: p.x, screenY: p.y, wouldHit };
     }
   }
 

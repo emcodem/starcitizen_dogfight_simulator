@@ -80,11 +80,15 @@ export interface OrbitState {
   planeRight: Vec3;
   planeUp: Vec3;
   respawnTimer: number;  // elapsed seconds since death, 0 while alive — see scenarios/runtime.ts
+  rollTimer?: number;    // seconds remaining in an active barrel-roll maneuver, undefined/0 = not rolling
+  rollCooldown?: number; // seconds until eligible to trigger another barrel roll — see enemyAI.ts
 }
 
 // Per-enemy state for the 'drifter' behavior — ballistic straight-line flight, no steering.
 export interface DriftState {
   respawnTimer: number; // elapsed seconds since death, 0 while alive — see scenarios/runtime.ts
+  rollTimer?: number;    // see OrbitState.rollTimer
+  rollCooldown?: number; // see OrbitState.rollCooldown
 }
 
 // Difficulty knobs for the 'fighter' behavior (see combat/enemyAI.ts for how each is used, and its

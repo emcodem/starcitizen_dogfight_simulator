@@ -148,6 +148,8 @@ export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: numbe
             enemy.vel = s.vel;
             enemy.quat = lookAtQuat(s.vel);
             enemy.drift.respawnTimer = 0;
+            enemy.drift.rollTimer = 0;
+            enemy.drift.rollCooldown = 0;
           }
         }
         continue;

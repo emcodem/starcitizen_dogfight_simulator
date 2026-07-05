@@ -128,16 +128,81 @@ function drawStation(cam: Camera): void {
   drawWireBox(STATION.pos, { x: h, y: h, z: h }, WORLD_AXES, cam, '#ff4d4d');
 }
 
+// Small fighter-like wireframe silhouette (Aim Training drones) — unlike drawWireBox's symmetric
+// cuboid, this has a distinct pointed nose and swept wings so the player can read facing and bank
+// at a glance instead of just position.
+function drawDroneSilhouette(center: Vec3, h: number, axes: ShipAxes, cam: Camera, color: string): void {
+  const { right, up, forward } = axes;
+  const toWorld = (rx: number, ry: number, rz: number): Vec3 => ({
+    x: center.x + rx * right.x + ry * up.x + rz * forward.x,
+    y: center.y + rx * right.y + ry * up.y + rz * forward.y,
+    z: center.z + rx * right.z + ry * up.z + rz * forward.z
+  });
+
+  const nose = toWorld(0, 0, h * 1.3);
+  const tailTop = toWorld(0, h * 0.45, -h * 0.7);
+  const tailLeft = toWorld(-h * 0.45, -h * 0.3, -h * 0.7);
+  const tailRight = toWorld(h * 0.45, -h * 0.3, -h * 0.7);
+  const wingLeft = toWorld(-h * 1.3, 0, -h * 0.1);
+  const wingRight = toWorld(h * 1.3, 0, -h * 0.1);
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.6;
+  const edges: [Vec3, Vec3][] = [
+    [nose, tailTop], [nose, tailLeft], [nose, tailRight],
+    [tailTop, tailLeft], [tailLeft, tailRight], [tailRight, tailTop],
+    [nose, wingLeft], [nose, wingRight],
+    [wingLeft, tailLeft], [wingRight, tailRight]
+  ];
+  for (const [a, b] of edges) {
+    drawLine3D(a.x, a.y, a.z, b.x, b.y, b.z, cam);
+  }
+}
+
 function drawEnemyHull(enemy: EnemyShip, cam: Camera): void {
   if (enemy.health.points <= 0) return;
   const h = enemy.type.hullRadius;
-  drawWireBox(enemy.pos, { x: h * 0.6, y: h * 0.2, z: h }, computeAxes(enemy.quat), cam, '#ff7a45');
+  const axes = computeAxes(enemy.quat);
+  if (enemy.behavior === 'orbiter' || enemy.behavior === 'drifter') {
+    drawDroneSilhouette(enemy.pos, h, axes, cam, '#ff7a45');
+  } else {
+    drawWireBox(enemy.pos, { x: h * 0.6, y: h * 0.2, z: h }, axes, cam, '#ff7a45');
+  }
+}
+
+// Recent-position history for Aim Training drones, so a curved orbit or a straight drift pass reads
+// as a contrail rather than just an instantaneous heading. Keyed by object identity — a respawned
+// drone reuses the same EnemyShip object (see scenarios/runtime.ts), so death clears the trail
+// instead of drawing a long streak back to the old death position.
+const droneTrails = new WeakMap<EnemyShip, Vec3[]>();
+const DRONE_TRAIL_LENGTH = 16;
+
+function updateAndDrawDroneTrail(enemy: EnemyShip, cam: Camera): void {
+  if (enemy.behavior !== 'orbiter' && enemy.behavior !== 'drifter') return;
+  if (enemy.health.points <= 0) {
+    droneTrails.delete(enemy);
+    return;
+  }
+  let trail = droneTrails.get(enemy);
+  if (!trail) {
+    trail = [];
+    droneTrails.set(enemy, trail);
+  }
+  trail.push({ x: enemy.pos.x, y: enemy.pos.y, z: enemy.pos.z });
+  if (trail.length > DRONE_TRAIL_LENGTH) trail.shift();
+
+  ctx.lineWidth = 1.4;
+  for (let i = 1; i < trail.length; i++) {
+    const alpha = (i / trail.length) * 0.45;
+    ctx.strokeStyle = `rgba(255, 170, 110, ${alpha.toFixed(3)})`;
+    drawLine3D(trail[i - 1].x, trail[i - 1].y, trail[i - 1].z, trail[i].x, trail[i].y, trail[i].z, cam);
+  }
 }
 
 function drawPip(ship: Ship, scenario: ScenarioRuntime, cam: Camera): void {
   const active = findActivePip(ship.pos, ship.vel, cam, scenario.enemies, canvas.width, canvas.height);
   if (!active) return;
-  ctx.strokeStyle = '#ffe696';
+  ctx.strokeStyle = active.wouldHit ? '#7dffa0' : '#ffe696';
   ctx.lineWidth = 1.5;
   const r = 8;
   ctx.beginPath();
@@ -416,7 +481,10 @@ export function render(ship: Ship, scenario: ScenarioRuntime | null = null): voi
 
   // scenario opponent(s), if any
   if (scenario) {
-    for (const enemy of scenario.enemies) drawEnemyHull(enemy, cam);
+    for (const enemy of scenario.enemies) {
+      updateAndDrawDroneTrail(enemy, cam);
+      drawEnemyHull(enemy, cam);
+    }
     drawEnemyExplosions(scenario, cam);
   }
 

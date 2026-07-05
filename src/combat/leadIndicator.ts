@@ -51,3 +51,33 @@ export function computeLeadPoint(
     z: targetPos.z + vRel.z * t
   };
 }
+
+// Unlike computeLeadPoint (which finds where to aim), this checks a fixed firing direction — the
+// shooter's actual current nose, since the player's gun always fires dead-along it rather than
+// snapping to the lead point (see world/weapons.ts). Finds the closest approach between the fired
+// projectile's path and the target's path, both extrapolated at their CURRENT velocity ("fire now,
+// everyone keeps their vector"), and reports whether that closest approach lands within
+// `targetRadius`. `maxTime` bounds the search to the projectile's actual lifetime.
+export function wouldHitIfFiredNow(
+  shooterPos: Vec3,
+  shooterVel: Vec3,
+  shooterForward: Vec3,
+  targetPos: Vec3,
+  targetVel: Vec3,
+  targetRadius: number,
+  projectileSpeed: number,
+  maxTime: number
+): boolean {
+  const projectileVel: Vec3 = {
+    x: shooterVel.x + shooterForward.x * projectileSpeed,
+    y: shooterVel.y + shooterForward.y * projectileSpeed,
+    z: shooterVel.z + shooterForward.z * projectileSpeed
+  };
+  const relPos = sub(targetPos, shooterPos);
+  const relVel = sub(targetVel, projectileVel);
+  const relSpeedSq = dot(relVel, relVel);
+  let t = relSpeedSq < 1e-9 ? 0 : -dot(relPos, relVel) / relSpeedSq;
+  t = Math.max(0, Math.min(maxTime, t));
+  const sep: Vec3 = { x: relPos.x + relVel.x * t, y: relPos.y + relVel.y * t, z: relPos.z + relVel.z * t };
+  return Math.hypot(sep.x, sep.y, sep.z) <= targetRadius;
+}
