@@ -21,7 +21,7 @@ describe('space brake', () => {
     ship.decoupled = true;
     ship.vel = { x: 0, y: 0, z: 50 };
     keys['KeyX'] = true; // default spaceBrake keybind
-    const dt = 0.1;
+    const dt = 0.01; // small enough that retro thrust/mass*dt doesn't clamp to zero (see below)
     step(ship, dt);
     const expectedDelta = (ship.type.linearThrust.retro / ship.type.mass) * dt;
     expect(ship.vel.z).toBeCloseTo(50 - expectedDelta, 3);
@@ -32,7 +32,7 @@ describe('space brake', () => {
     ship.decoupled = true;
     ship.vel = { x: 0, y: 0, z: -50 };
     keys['KeyX'] = true;
-    const dt = 0.1;
+    const dt = 0.01;
     step(ship, dt);
     const expectedDelta = (ship.type.linearThrust.main / ship.type.mass) * dt;
     expect(ship.vel.z).toBeCloseTo(-50 + expectedDelta, 3);
@@ -64,7 +64,7 @@ describe('space brake', () => {
     const ship = makeShip(SHIP_TYPES[0]); // decoupled: false, by default
     ship.vel = { x: 0, y: 0, z: 50 };
     keys['KeyX'] = true;
-    const dt = 0.1;
+    const dt = 0.01;
     step(ship, dt);
     const expectedDelta = (ship.type.linearThrust.retro / ship.type.mass) * dt;
     // same result as the decoupled case above — brake alone determines deceleration, never harder

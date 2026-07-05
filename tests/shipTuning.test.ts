@@ -13,12 +13,12 @@ describe('ship angular tuning', () => {
   for (const ship of SHIP_TYPES) {
     for (const axis of axes) {
       it(`${ship.name} ${axis}: angularThrust / angularDrag reaches maxAngVel`, () => {
-        const steadyState = ship.angularThrust[axis] / ship.angularDrag;
+        const steadyState = ship.angularThrust[axis] / ship.angularDrag[axis];
         expect(steadyState).toBeCloseTo(ship.maxAngVel[axis], 2);
       });
 
       it(`${ship.name} ${axis}: boostAngularThrust / angularDrag reaches boostMaxAngVel`, () => {
-        const steadyState = ship.boostAngularThrust[axis] / ship.angularDrag;
+        const steadyState = ship.boostAngularThrust[axis] / ship.angularDrag[axis];
         expect(steadyState).toBeCloseTo(ship.boostMaxAngVel[axis], 2);
       });
 
@@ -30,23 +30,27 @@ describe('ship angular tuning', () => {
 });
 
 // Same tuning invariant as above, for linear thrust: boostLinearThrust must be high enough that
-// the ship actually accelerates (against linearDrag) up to the documented boosted top speed,
-// not just that the speed cap was raised without the thrust to ever reach it.
+// the ship actually accelerates (against boostLinearDrag) up to the documented boosted top speed,
+// not just that the speed cap was raised without the thrust to ever reach it. Boost uses its own
+// boostLinearDrag rather than linearDrag — real-game measurement showed boosting is far less
+// damped than plain thrust (not just "more thrust"), so boostLinearThrust can end up *lower* than
+// plain linearThrust despite the higher top speed; there's no "stronger than non-boosted" guard
+// here for that reason (see shipTypes.ts).
 describe('ship boosted linear tuning', () => {
   for (const ship of SHIP_TYPES) {
-    it(`${ship.name}: boostLinearThrust.main / (mass * linearDrag) reaches boostSpeedForward`, () => {
-      const steadyState = ship.boostLinearThrust.main / (ship.mass * ship.linearDrag);
+    it(`${ship.name}: boostLinearThrust.main / (mass * boostLinearDrag) reaches boostSpeedForward`, () => {
+      const steadyState = ship.boostLinearThrust.main / (ship.mass * ship.boostLinearDrag);
       expect(steadyState).toBeCloseTo(ship.boostSpeedForward, 2);
     });
 
-    it(`${ship.name}: boostLinearThrust.retro / (mass * linearDrag) reaches boostSpeedBack`, () => {
-      const steadyState = ship.boostLinearThrust.retro / (ship.mass * ship.linearDrag);
+    it(`${ship.name}: boostLinearThrust.retro / (mass * boostLinearDrag) reaches boostSpeedBack`, () => {
+      const steadyState = ship.boostLinearThrust.retro / (ship.mass * ship.boostLinearDrag);
       expect(steadyState).toBeCloseTo(ship.boostSpeedBack, 2);
     });
 
-    it(`${ship.name}: boostLinearThrust is stronger than the non-boosted main/retro thrust`, () => {
-      expect(ship.boostLinearThrust.main).toBeGreaterThan(ship.linearThrust.main);
-      expect(ship.boostLinearThrust.retro).toBeGreaterThan(ship.linearThrust.retro);
+    it(`${ship.name}: boostSpeedForward/Back are faster than the non-boosted scmSpeed/scmSpeedBack`, () => {
+      expect(ship.boostSpeedForward).toBeGreaterThan(ship.scmSpeed);
+      expect(ship.boostSpeedBack).toBeGreaterThan(ship.scmSpeedBack);
     });
   }
 });

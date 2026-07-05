@@ -17,12 +17,12 @@ describe('deriveShipType', () => {
     });
 
     it(`${axis}: preserves the angularThrust/angularDrag == maxAngVel invariant`, () => {
-      const steadyState = half.angularThrust[axis] / half.angularDrag;
+      const steadyState = half.angularThrust[axis] / half.angularDrag[axis];
       expect(steadyState).toBeCloseTo(half.maxAngVel[axis], 5);
     });
 
     it(`${axis}: preserves the boostAngularThrust/angularDrag == boostMaxAngVel invariant`, () => {
-      const steadyState = half.boostAngularThrust[axis] / half.angularDrag;
+      const steadyState = half.boostAngularThrust[axis] / half.angularDrag[axis];
       expect(steadyState).toBeCloseTo(half.boostMaxAngVel[axis], 5);
     });
   }

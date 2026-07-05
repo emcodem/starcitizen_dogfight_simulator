@@ -45,10 +45,11 @@ export function integrateFlight(body: FlightBody, input: FlightInputs, dt: numbe
   body.angVel.yaw   += (yawInput   * angularThrust.yaw   / t.mass) * dt;
   body.angVel.roll  += (rollInput  * angularThrust.roll  / t.mass) * dt;
 
-  // angular drag (dampening — simulates RCS auto-dampening like SC's flight computer)
-  body.angVel.pitch -= (body.angVel.pitch * t.angularDrag / t.mass) * dt;
-  body.angVel.yaw   -= (body.angVel.yaw   * t.angularDrag / t.mass) * dt;
-  body.angVel.roll  -= (body.angVel.roll  * t.angularDrag / t.mass) * dt;
+  // angular drag (dampening — simulates RCS auto-dampening like SC's flight computer) — per axis,
+  // since the real ship spins down at a different rate per axis (see shipTypes.ts)
+  body.angVel.pitch -= (body.angVel.pitch * t.angularDrag.pitch / t.mass) * dt;
+  body.angVel.yaw   -= (body.angVel.yaw   * t.angularDrag.yaw   / t.mass) * dt;
+  body.angVel.roll  -= (body.angVel.roll  * t.angularDrag.roll  / t.mass) * dt;
 
   body.angVel.pitch = clamp(body.angVel.pitch, -maxAngVel.pitch, maxAngVel.pitch);
   body.angVel.yaw   = clamp(body.angVel.yaw,   -maxAngVel.yaw,   maxAngVel.yaw);
@@ -103,17 +104,34 @@ export function integrateFlight(body: FlightBody, input: FlightInputs, dt: numbe
   body.vel.z += accel.z * dt;
 
   // brake's decelerate() above already counter-thrusts at the ship's own max rate for whichever
-  // axis is moving — stacking the passive coupled-mode drag on top of that let full brake
-  // decelerate harder than the ship's strongest thruster could ever accelerate it (retro/main
-  // thrust decel plus drag-at-speed together exceeded either alone). Skip the passive drag while
-  // actively braking so total deceleration stays bounded by real thrust, same as normal thrust.
-  // Also skipped entirely in decoupled mode — no auto-damping, so you coast freely on whatever
-  // velocity you have, same as SC's decoupled flight.
+  // axis is moving — stacking any of the below on top of that let full brake decelerate harder
+  // than the ship's strongest thruster could ever accelerate it. Skip all of it while actively
+  // braking so total deceleration stays bounded by real thrust, same as normal thrust. Also
+  // skipped entirely in decoupled mode — no auto-damping, so you coast freely on whatever velocity
+  // you have, same as SC's decoupled flight.
   if (!input.decoupled && !input.brake) {
-    const drag = t.linearDrag;
-    body.vel.x -= body.vel.x * drag * dt;
-    body.vel.y -= body.vel.y * drag * dt;
-    body.vel.z -= body.vel.z * drag * dt;
+    if (throttle !== 0 || strafeX !== 0 || strafeY !== 0) {
+      // proportional drag while actively thrusting on any linear axis — this is what makes thrust
+      // settle at exactly scmSpeed/boostSpeedForward instead of accelerating forever (see
+      // shipTypes.ts). Boosting uses its own (much lower) boostLinearDrag, not this one.
+      const drag = body.boosting ? t.boostLinearDrag : t.linearDrag;
+      body.vel.x -= body.vel.x * drag * dt;
+      body.vel.y -= body.vel.y * drag * dt;
+      body.vel.z -= body.vel.z * drag * dt;
+    } else {
+      // No input at all: real Gladius sheds speed at a flat rate, not a decaying one (measured —
+      // see shipTypes.ts), so this can't be the same proportional drag used above (which would
+      // taper off approaching zero). Same bounded-delta shape as the space brake's decelerate()
+      // above, just a much gentler constant — and, like it, clamped so it can't overshoot past zero.
+      const speed = Math.hypot(body.vel.x, body.vel.y, body.vel.z);
+      if (speed > 0) {
+        const newSpeed = Math.max(0, speed - t.coastDecel * dt);
+        const scale = newSpeed / speed;
+        body.vel.x *= scale;
+        body.vel.y *= scale;
+        body.vel.z *= scale;
+      }
+    }
   }
 
   // Flight computer speed limiter: caps velocity at SCM speed (or the ship's separate, lower

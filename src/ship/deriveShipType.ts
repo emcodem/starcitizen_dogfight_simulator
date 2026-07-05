@@ -4,11 +4,11 @@ function scaleAngular(a: AngularState, scale: number): AngularState {
   return { pitch: a.pitch * scale, yaw: a.yaw * scale, roll: a.roll * scale };
 }
 
-function thrustFromMaxAngVel(maxAngVel: AngularState, angularDrag: number): AngularState {
+function thrustFromMaxAngVel(maxAngVel: AngularState, angularDrag: AngularState): AngularState {
   return {
-    pitch: maxAngVel.pitch * angularDrag,
-    yaw: maxAngVel.yaw * angularDrag,
-    roll: maxAngVel.roll * angularDrag
+    pitch: maxAngVel.pitch * angularDrag.pitch,
+    yaw: maxAngVel.yaw * angularDrag.yaw,
+    roll: maxAngVel.roll * angularDrag.roll
   };
 }
 

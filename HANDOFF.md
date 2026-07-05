@@ -150,44 +150,60 @@ real SC behavior. If strafe+roll ever looks wrong again, check whether
 something reintroduced camera-position coupling to roll before reaching for
 this stabilization trick again.
 
-**Coupled vs. decoupled mode** mirrors SC: coupled mode applies linear drag
-(auto-damping — velocity bleeds off when you let go of the stick); decoupled
-mode has none of that, so you coast freely on whatever velocity you have
-(pure Newtonian coasting) until you thrust against it. The SCM/boost speed
-limiter, though, is **not** part of that drag and applies in both modes —
-decoupling lets you fly without your nose needing to point along your
-velocity vector, it doesn't let you exceed SCM speed; a decoupled boost can
-push past `scmSpeed` same as a coupled one. When over cap (typically: right
-after a boost ends and the cap drops out from under you), speed bleeds back
-down at the ship's own thrust rate — same mechanism as the space brake, see
-below — rather than snapping to the cap in a single frame; a boost wearing
-off should feel like a deceleration, not a teleport. `boostLinearThrust`
-(main/retro) exists specifically so boosting also *accelerates* the ship,
-not just raises the cap — plain `linearThrust` is tuned so drag settles the
-ship at exactly `scmSpeed`, so without boosted thrust the ship could never
-climb to a speed where the higher cap would even matter (same derivation as
-`angularThrust`/`boostAngularThrust`, guarded by `tests/shipTuning.test.ts`).
-`spaceBrakeOn` is hold-to-brake — recomputed every tick from
+**Coupled vs. decoupled mode** mirrors SC: coupled mode applies auto-damping
+(velocity bleeds off when you let go of the stick); decoupled mode has none
+of that, so you coast freely on whatever velocity you have (pure Newtonian
+coasting) until you thrust against it. That coupled-mode auto-damping is
+**not** a single mechanism — `physics/flightModel.ts` splits it in two,
+based on real-game frame-counted measurements against the actual Gladius:
+while actively thrusting on any linear axis, proportional drag (`linearDrag`,
+or `boostLinearDrag` while boosting) applies, same as before; the moment
+there's *no* throttle/strafe input at all, a flat `coastDecel` (m/s²,
+constant, not proportional) takes over instead — real Gladius sheds speed at
+a steady rate when you fully let go, not a decaying one, so a bigger drag
+value alone couldn't reproduce it (it would taper off near zero). The
+SCM/boost speed limiter is a third, separate mechanism from either of these,
+and applies in both coupled and decoupled modes — decoupling lets you fly
+without your nose needing to point along your velocity vector, it doesn't
+let you exceed SCM speed; a decoupled boost can push past `scmSpeed` same as
+a coupled one. When over cap (typically: right after a boost ends and the
+cap drops out from under you), speed bleeds back down at the ship's own
+thrust rate — same mechanism as the space brake, see below — rather than
+snapping to the cap in a single frame; a boost wearing off should feel like
+a deceleration, not a teleport. `boostLinearThrust` (main/retro) exists
+specifically so boosting also *accelerates* the ship, not just raises the
+cap — plain `linearThrust` is tuned so `linearDrag` settles the ship at
+exactly `scmSpeed`, and `boostLinearThrust` the same way against its own
+`boostLinearDrag` (same derivation as `angularThrust`/`boostAngularThrust`,
+guarded by `tests/shipTuning.test.ts`) — real measurement showed boost is
+far less damped than plain thrust (not just stronger), so `boostLinearThrust`
+actually ends up *lower* than plain `linearThrust` despite the much higher
+top speed. `spaceBrakeOn` is hold-to-brake — recomputed every tick from
 `isActive('spaceBrake')` OR a held joystick button, NOT a toggle (unlike
-`decoupled`, which is a real edge-triggered toggle) — and the passive drag
-is skipped while braking (brake's own thrust-based counter-force already
-decelerates at the ship's actual thrust rating; stacking drag on top made a
-full brake decelerate harder than the ship's strongest engine could ever
-accelerate it).
+`decoupled`, which is a real edge-triggered toggle) — and neither the
+proportional drag nor `coastDecel` apply while braking (the brake's own
+thrust-based counter-force already decelerates at the ship's actual thrust
+rating; stacking either on top made a full brake decelerate harder than the
+ship's strongest engine could ever accelerate it).
 
 **Gladius is the only ship.** `SHIP_TYPES` (in `ship/shipTypes.ts`) has a
 single entry, with mass/thrust/drag values back-derived from real SCM speed
 (226 m/s) and real pitch/yaw/roll rates (68/52/200°/s) the user provided from
-Erkul-style stats. Retro/strafe/vertical thrust are still estimated (not in
-the source data). **Tuning rule:** `angularThrust` is set to
-`maxAngVel × angularDrag` per axis — angular drag is applied every frame
-proportional to current angular velocity (see `physics/step.ts`), so the
-ship settles at a steady state of `angularThrust / angularDrag`, NOT at
-`maxAngVel` (the clamp is a ceiling, not a target). Getting this wrong once
-already caused the Gladius to top out at roughly half its real rotation
-rate on every axis — `tests/shipTuning.test.ts` guards against reintroducing
-that mistake. The earlier placeholder ships (Interceptor, Light/Heavy
-Fighter) were removed since they were never matched to real data.
+Erkul-style stats, later refined against frame-counted stopwatch measurements
+of the actual ship's acceleration/deceleration curves (see the big comment
+above `SHIP_TYPES` in `shipTypes.ts` for the raw data and derivations).
+Retro/strafe/vertical thrust are still estimated (not in the source data).
+**Tuning rule:** `angularThrust` is set to `maxAngVel × angularDrag` per axis
+— `angularDrag` is itself per-axis (real Gladius spins down at a measurably
+different rate on each axis: roll/pitch/yaw settle with different time
+constants), applied every frame proportional to current angular velocity
+(see `physics/flightModel.ts`), so the ship settles at a steady state of
+`angularThrust / angularDrag`, NOT at `maxAngVel` (the clamp is a ceiling,
+not a target). Getting this wrong once already caused the Gladius to top out
+at roughly half its real rotation rate on every axis — `tests/shipTuning.test.ts`
+guards against reintroducing that mistake. The earlier placeholder ships
+(Interceptor, Light/Heavy Fighter) were removed since they were never
+matched to real data.
 
 ## Controls system
 

@@ -24,8 +24,16 @@ export interface ShipType {
                    // physics (no established conversion from this to the tuning `mass` above)
   linearThrust: { main: number; retro: number; strafe: number; vertical: number };
   angularThrust: AngularState;      // == maxAngVel * angularDrag per axis — see shipTypes.ts
-  linearDrag: number;
-  angularDrag: number;
+  linearDrag: number;                // proportional drag while actively thrusting (coupled, not boosting)
+  boostLinearDrag: number;           // same, but while boosting — measured much lower than linearDrag
+                                      // (boost trades agility for top speed, not just "more thrust") —
+                                      // see shipTypes.ts
+  coastDecel: number;                // m/s^2, constant-force auto-brake applied in coupled mode when
+                                      // there's no throttle/strafe input at all (and not actively
+                                      // braking) — real Gladius sheds speed at a flat rate here, not
+                                      // proportional drag (which would taper as speed drops) — see
+                                      // physics/flightModel.ts and shipTypes.ts
+  angularDrag: AngularState;         // per-axis — real Gladius spins down at a different rate per axis
   maxAngVel: AngularState;
   scmSpeed: number;                 // coupled-mode speed cap, forward (local +Z velocity)
   scmSpeedBack: number;             // coupled-mode speed cap, backward (local -Z velocity)
@@ -35,7 +43,7 @@ export interface ShipType {
   boostRechargeRate: number;        // meter-seconds recovered per real second while not boosting
   boostMaxAngVel: AngularState;     // rotation-rate cap while boosting
   boostAngularThrust: AngularState; // == boostMaxAngVel * angularDrag per axis — same derivation as angularThrust
-  // main/retro thrust while boosting — == boostSpeedForward/Back * linearDrag * mass, so continuous
+  // main/retro thrust while boosting — == boostSpeedForward/Back * boostLinearDrag * mass, so continuous
   // boost thrust actually converges to the documented boosted top speed under drag instead of just
   // raising the speed cap without the thrust to ever reach it (same derivation as angularThrust).
   // No boosted strafe/vertical — real SC's afterburner only affects the main engine.

@@ -94,13 +94,24 @@ computeAxes(ship.quat)`, no offset).
   ship attitude; it previously caused inverted-feeling post-roll pitch input.
 - **First-person camera has no offset** — a chase-camera offset previously
   made the ship look like it was flying in circles during a roll.
-- **`angularThrust == maxAngVel * angularDrag`** per axis in `shipTypes.ts` —
-  steady-state target, not a clamp target. Guarded by `tests/shipTuning.test.ts`
-  and `tests/deriveShipType.test.ts`. `boostLinearThrust == boostSpeedForward/Back
-  * linearDrag * mass` is the same invariant for boosted linear thrust — without
-  it, boosting only raises the speed cap while drag still settles unboosted
-  thrust at exactly `scmSpeed`, so the ship can never climb to a speed the
-  higher cap would matter for.
+- **`angularThrust == maxAngVel * angularDrag`** per axis in `shipTypes.ts`
+  (`angularDrag` is itself per-axis, real Gladius spins down at a different
+  rate per axis) — steady-state target, not a clamp target. Guarded by
+  `tests/shipTuning.test.ts` and `tests/deriveShipType.test.ts`.
+  `boostLinearThrust == boostSpeedForward/Back * boostLinearDrag * mass` is the
+  same invariant for boosted linear thrust — without it, boosting only raises
+  the speed cap while drag still settles unboosted thrust at exactly
+  `scmSpeed`, so the ship can never climb to a speed the higher cap would
+  matter for. Boost uses its own `boostLinearDrag`, not `linearDrag` — real
+  measurement showed boosting is far less damped, not just higher-thrust, so
+  `boostLinearThrust` can end up *lower* than plain `linearThrust` despite the
+  higher top speed.
+- **`coastDecel` is a flat m/s² deceleration, not proportional drag** — used
+  in `flightModel.ts` only when there's zero throttle/strafe input in coupled
+  mode (releasing the stick entirely), separate from the proportional
+  `linearDrag`/`boostLinearDrag` applied while actively thrusting. Real
+  Gladius sheds speed at a constant rate when you let go, not a decaying one
+  — don't collapse this back into a single drag value.
 - Keyboard, mouse-look, and joystick input combine **additively** (summed,
   clamped to [-1,1]) in `physics/step.ts` — never an override chain. Joystick
   stays fully optional this way.
