@@ -66,6 +66,8 @@ body.touch #scenario-menu-toggle { top: auto; bottom: 180px; right: 110px; }
 #fullscreen-toggle.on { border-color: var(--hud); color: var(--hud); }
 body.touch #fullscreen-toggle { top: auto; bottom: 180px; right: 230px; }
 
+#scenario-menu-links a:hover { color: var(--accent); border-color: var(--accent); }
+
 .scenario-card {
   border: 1px solid var(--hud-dim);
   padding: 12px 14px;
