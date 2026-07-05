@@ -63,10 +63,13 @@ export function integrateFlight(body: FlightBody, input: FlightInputs, dt: numbe
   // more abruptly than that infinite tail. No frame-counted release trace is available to fit the
   // real curve (no in-game indicator marks the moment input is released), so approximate it with a
   // snap-to-zero floor once residual angVel is imperceptible, rather than guessing at a different
-  // decay shape.
-  if (Math.abs(body.angVel.pitch) < ANGULAR_STOP_THRESHOLD) body.angVel.pitch = 0;
-  if (Math.abs(body.angVel.yaw) < ANGULAR_STOP_THRESHOLD) body.angVel.yaw = 0;
-  if (Math.abs(body.angVel.roll) < ANGULAR_STOP_THRESHOLD) body.angVel.roll = 0;
+  // decay shape. Gated on that axis having zero input — otherwise this stomps small in-progress
+  // rotation (a gentle mouse-look nudge, a partial joystick deflection, or even full keyboard input
+  // at a high enough frame rate that one tick's accel is still under the threshold), which reads as
+  // a large deadzone that has nothing to do with any actual input deadzone setting.
+  if (pitchInput === 0 && Math.abs(body.angVel.pitch) < ANGULAR_STOP_THRESHOLD) body.angVel.pitch = 0;
+  if (yawInput === 0 && Math.abs(body.angVel.yaw) < ANGULAR_STOP_THRESHOLD) body.angVel.yaw = 0;
+  if (rollInput === 0 && Math.abs(body.angVel.roll) < ANGULAR_STOP_THRESHOLD) body.angVel.roll = 0;
 
   body.angVel.pitch = clamp(body.angVel.pitch, -maxAngVel.pitch, maxAngVel.pitch);
   body.angVel.yaw   = clamp(body.angVel.yaw,   -maxAngVel.yaw,   maxAngVel.yaw);
