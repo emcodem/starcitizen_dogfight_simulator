@@ -7,6 +7,7 @@ import { WEAPON, projectiles } from '../world/weapons';
 import * as MouseLook from '../input/mouseLook';
 import * as EspAssist from '../combat/espAssist';
 import { findActivePip } from '../combat/pipTargeting';
+import { ENEMY_EXPLOSION_DURATION } from '../scenarios/runtime';
 import { project as projectShared, type Camera, type ProjectedPoint } from './projection';
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
@@ -146,6 +147,29 @@ function drawPip(ship: Ship, scenario: ScenarioRuntime, cam: Camera): void {
   ctx.lineTo(active.screenX - r, active.screenY);
   ctx.closePath();
   ctx.stroke();
+}
+
+// Brief burst at an enemy's last position when it's destroyed, so a kill reads as an event instead
+// of the hull silently vanishing (drawEnemyHull stops drawing it the instant health hits 0).
+function drawEnemyExplosions(scenario: ScenarioRuntime, cam: Camera): void {
+  for (const ex of scenario.explosions) {
+    const p = project(ex.pos.x, ex.pos.y, ex.pos.z, cam);
+    if (!p) continue;
+    const progress = 1 - ex.timer / ENEMY_EXPLOSION_DURATION;
+    const alpha = 1 - progress;
+    const ringRadius = (10 + progress * 45) * clamp(p.scale, 0.3, 3);
+
+    ctx.strokeStyle = `rgba(255, 170, 80, ${alpha.toFixed(3)})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, ringRadius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = `rgba(255, 225, 160, ${(alpha * 0.7).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, ringRadius * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 // ESP reticle — a smaller ring than the mouse-look virtual-stick circle, always visible (unlike
@@ -376,6 +400,7 @@ export function render(ship: Ship, scenario: ScenarioRuntime | null = null): voi
   // scenario opponent(s), if any
   if (scenario) {
     for (const enemy of scenario.enemies) drawEnemyHull(enemy, cam);
+    drawEnemyExplosions(scenario, cam);
   }
 
   // weapon tracers

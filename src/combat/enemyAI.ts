@@ -363,9 +363,12 @@ export function spawnOrbitState(): OrbitState {
   };
 }
 
-// Advances the orbit and re-derives pos/vel/quat from it — vel is the analytic tangential
-// derivative of the position formula, not a finite difference, so computeLeadPoint gets a real
-// velocity to lead against instead of one frame of jitter.
+// Advances the orbit and re-derives pos/vel/quat from it — vel is the analytic derivative of the
+// position formula (tangential orbit term plus the player's own velocity, since the orbit center
+// is the player's *current* pos and so translates with them), not a finite difference, so
+// computeLeadPoint gets a real velocity to lead against instead of one frame of jitter. Omitting
+// the player.vel term here previously made the lead point (and therefore the PIP/ESP) wrong
+// whenever the player wasn't perfectly stationary.
 export function orbiterThink(enemy: EnemyShip, player: Ship, dt: number): void {
   const orbit = enemy.orbit;
   if (!orbit) return;
@@ -380,9 +383,9 @@ export function orbiterThink(enemy: EnemyShip, player: Ship, dt: number): void {
   };
   const tangential = radius * angularSpeed;
   enemy.vel = {
-    x: tangential * (-sinP * r.x + cosP * u.x),
-    y: tangential * (-sinP * r.y + cosP * u.y),
-    z: tangential * (-sinP * r.z + cosP * u.z)
+    x: player.vel.x + tangential * (-sinP * r.x + cosP * u.x),
+    y: player.vel.y + tangential * (-sinP * r.y + cosP * u.y),
+    z: player.vel.z + tangential * (-sinP * r.z + cosP * u.z)
   };
   enemy.quat = lookAtQuat(enemy.vel);
 }

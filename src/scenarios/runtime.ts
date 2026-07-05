@@ -12,6 +12,10 @@ import { integrateFlight, resolveBoost } from '../physics/flightModel';
 // "tracking, not yet locked" phase instead of hosing the player from any angle.
 const AIM_FIRE_CONE_RAD = 0.05;
 
+// Kept short so it doesn't linger through an orbiter/drifter's respawn — see render.ts's
+// drawEnemyExplosions, which reads this same constant to fade the burst out in sync.
+export const ENEMY_EXPLOSION_DURATION = 0.6;
+
 export function startScenario(config: ScenarioConfig, player: Ship): ScenarioRuntime {
   player.health = createHealth(config.hitsToKillPlayer);
   const enemies: EnemyShip[] = config.enemySpawns.map(spawn => ({
@@ -45,7 +49,10 @@ export function startScenario(config: ScenarioConfig, player: Ship): ScenarioRun
     }
   }
 
-  return { config, enemies, outcome: 'active', elapsedSec: 0, gateIndex: 0, stats: { shotsFired: 0, hitsLanded: 0 } };
+  return {
+    config, enemies, outcome: 'active', elapsedSec: 0, gateIndex: 0,
+    stats: { shotsFired: 0, hitsLanded: 0 }, explosions: []
+  };
 }
 
 export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: number): void {
@@ -53,7 +60,10 @@ export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: numbe
   runtime.elapsedSec += dt;
 
   for (const enemy of runtime.enemies) {
-    if (enemy.health.points <= 0) continue;
+    // 'orbiter'/'drifter' handle their own dead-state below (countdown + respawn) — everything
+    // else (turret/chaser/fighter) just stays dead once destroyed, per the 'destroy' scenarios'
+    // design. Skipping dead orbiters/drifters here too would make that respawn code unreachable.
+    if (enemy.health.points <= 0 && enemy.behavior !== 'orbiter' && enemy.behavior !== 'drifter') continue;
 
     if (enemy.behavior === 'chaser') {
       const decision = FighterAI.chaserThink(enemy, player);
@@ -174,7 +184,14 @@ export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: numbe
     }
   }
 
-  resolveHits(projectiles, player, runtime.enemies, () => runtime.stats.hitsLanded++);
+  resolveHits(projectiles, player, runtime.enemies, () => runtime.stats.hitsLanded++, enemy => {
+    runtime.explosions.push({ pos: { x: enemy.pos.x, y: enemy.pos.y, z: enemy.pos.z }, timer: ENEMY_EXPLOSION_DURATION });
+  });
+
+  for (let i = runtime.explosions.length - 1; i >= 0; i--) {
+    runtime.explosions[i].timer -= dt;
+    if (runtime.explosions[i].timer <= 0) runtime.explosions.splice(i, 1);
+  }
 
   if (player.health && player.health.points <= 0) {
     runtime.outcome = 'lost';

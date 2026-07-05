@@ -37,6 +37,13 @@ export interface ScenarioConfig {
   surviveDurationSec?: number;   // 'gates' (time limit) and 'survive' (drill length) only
 }
 
+// A brief visual burst at an enemy's position when it's destroyed — see ENEMY_EXPLOSION_DURATION
+// in runtime.ts and drawEnemyExplosions in render.ts.
+export interface EnemyExplosion {
+  pos: Vec3;
+  timer: number; // seconds remaining, counts down to 0
+}
+
 export interface ScenarioRuntime {
   config: ScenarioConfig;
   enemies: EnemyShip[];
@@ -45,4 +52,5 @@ export interface ScenarioRuntime {
   elapsedSec: number;
   gateIndex: number; // index of the next uncleared gate in config.gatePath — 'gates' scenarios only
   stats: { shotsFired: number; hitsLanded: number }; // accuracy tracking, shown on the results screen
+  explosions: EnemyExplosion[]; // active death-effect bursts, pruned as their timers expire
 }

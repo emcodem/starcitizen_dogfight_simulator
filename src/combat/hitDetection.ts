@@ -12,7 +12,8 @@ export function resolveHits(
   projectiles: Projectile[],
   player: Ship,
   enemies: EnemyShip[],
-  onEnemyHit?: () => void
+  onEnemyHit?: () => void,
+  onEnemyDestroyed?: (enemy: EnemyShip) => void
 ): void {
   for (let i = projectiles.length - 1; i >= 0; i--) {
     const pr = projectiles[i];
@@ -29,8 +30,9 @@ export function resolveHits(
     for (const enemy of enemies) {
       if (enemy.health.points <= 0) continue;
       if (distance(pr.pos, enemy.pos) <= enemy.type.hullRadius) {
-        applyDamage(enemy.health);
+        const destroyed = applyDamage(enemy.health);
         onEnemyHit?.();
+        if (destroyed) onEnemyDestroyed?.(enemy);
         projectiles.splice(i, 1);
         break;
       }
