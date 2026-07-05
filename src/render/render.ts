@@ -163,7 +163,7 @@ function drawEnemyHull(enemy: EnemyShip, cam: Camera): void {
   if (enemy.health.points <= 0) return;
   const h = enemy.type.hullRadius;
   const axes = computeAxes(enemy.quat);
-  if (enemy.behavior === 'orbiter' || enemy.behavior === 'drifter') {
+  if (enemy.behavior === 'orbiter' || enemy.behavior === 'drifter' || enemy.behavior === 'cruiser') {
     drawDroneSilhouette(enemy.pos, h, axes, cam, '#ff7a45');
   } else {
     drawWireBox(enemy.pos, { x: h * 0.6, y: h * 0.2, z: h }, axes, cam, '#ff7a45');
@@ -199,15 +199,17 @@ function drawEnemyInfo(enemy: EnemyShip, ship: Ship, cam: Camera): void {
   ctx.fillText(`${rangeRate >= 0 ? '+' : ''}${rangeRate.toFixed(0)} m/s`, p.x, p.y + offsetY + 11);
 }
 
-// Recent-position history for Aim Training drones, so a curved orbit or a straight drift pass reads
-// as a contrail rather than just an instantaneous heading. Keyed by object identity — a respawned
-// drone reuses the same EnemyShip object (see scenarios/runtime.ts), so death clears the trail
-// instead of drawing a long streak back to the old death position.
+// Recent-position history for drone-silhouette enemies (Aim Training orbiters/drifters, Merge
+// Drill's cruiser), so a curved orbit or a straight flight path reads as a contrail rather than
+// just an instantaneous heading — the silhouette alone is easy to lose track of the facing/heading
+// of at a glance. Keyed by object identity — a respawned drone reuses the same EnemyShip object
+// (see scenarios/runtime.ts), so death clears the trail instead of drawing a long streak back to
+// the old death position.
 const droneTrails = new WeakMap<EnemyShip, Vec3[]>();
 const DRONE_TRAIL_LENGTH = 16;
 
 function updateAndDrawDroneTrail(enemy: EnemyShip, cam: Camera): void {
-  if (enemy.behavior !== 'orbiter' && enemy.behavior !== 'drifter') return;
+  if (enemy.behavior !== 'orbiter' && enemy.behavior !== 'drifter' && enemy.behavior !== 'cruiser') return;
   if (enemy.health.points <= 0) {
     droneTrails.delete(enemy);
     return;
@@ -336,9 +338,11 @@ function drawEspCircle(): void {
 }
 
 // Merge/closure drills' "hold station here" envelope — see ScenarioConfig.rangeBubbleRadius.
-// Drawn as a single shaded, translucent disc at the sphere's projected center/radius rather than
+// Drawn as a single shaded, near-opaque disc at the sphere's projected center/radius rather than
 // wireframe great-circles — since this projector has no real 3D surface shading, a filled circle
-// with a soft off-center highlight is what reads as a solid ball rather than flat rings at a glance.
+// with a subtle off-center highlight is what reads as a solid ball rather than flat rings at a
+// glance. Kept to one hue family and uniformly high alpha throughout (not fading translucent at
+// the edge) so it reads as a single opaque marker rather than a colorful gradient.
 function drawRangeBubble(scenario: ScenarioRuntime, cam: Camera): void {
   const radius = scenario.config.rangeBubbleRadius;
   if (!radius) return;
@@ -350,13 +354,11 @@ function drawRangeBubble(scenario: ScenarioRuntime, cam: Camera): void {
     if (r < 1) continue;
 
     const gradient = ctx.createRadialGradient(
-      p.x - r * 0.35, p.y - r * 0.35, r * 0.05,
+      p.x - r * 0.35, p.y - r * 0.35, r * 0.1,
       p.x, p.y, r
     );
-    gradient.addColorStop(0, 'rgba(220,255,230,0.95)');
-    gradient.addColorStop(0.55, 'rgba(110,240,165,0.88)');
-    gradient.addColorStop(0.85, 'rgba(60,190,125,0.82)');
-    gradient.addColorStop(1, 'rgba(40,160,105,0.75)');
+    gradient.addColorStop(0, 'rgba(120,215,175,0.97)');
+    gradient.addColorStop(1, 'rgba(70,165,135,0.95)');
     ctx.fillStyle = gradient;
     ctx.beginPath();
     ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
