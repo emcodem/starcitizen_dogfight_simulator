@@ -1,4 +1,5 @@
 import type { ActionName, AxisConcept, KeyBindings, KeyChord, ScDevice, XmlAxisBinding } from '../types';
+import { registerConfig } from './configRegistry';
 
 // =====================================================================
 // ControlsModule — standalone unit for keybind management.
@@ -8,8 +9,9 @@ import type { ActionName, AxisConcept, KeyBindings, KeyChord, ScDevice, XmlAxisB
 //      sim action currently active?" for the physics step to consult.
 //   2. Parse a Star Citizen actionmaps.xml export and translate any
 //      keyboard (kb1_) rebinds it finds into sim bindings.
-//   3. Save/load named keybind presets (via the artifact storage API
-//      when available, otherwise via file export/import).
+//   3. Register KEYBINDS with the config registry (see configRegistry.ts)
+//      so it's included in "control preset" save/load/export/import —
+//      presetStore.ts owns the actual persistence.
 //
 // Caveat on XML import: Star Citizen only writes REBOUND actions into
 // actionmaps.xml, not defaults — so a file where the player never
@@ -19,18 +21,6 @@ import type { ActionName, AxisConcept, KeyBindings, KeyChord, ScDevice, XmlAxisB
 // it isn't guaranteed to match every game version. Anything not found
 // is reported plainly rather than silently guessed at.
 // =====================================================================
-
-declare global {
-  interface Window {
-    // Present only when running as a Claude artifact; used for preset persistence there.
-    storage?: {
-      get(key: string, opts: boolean): Promise<{ value: string } | null>;
-      set(key: string, value: string, opts: boolean): Promise<void>;
-      delete(key: string, opts: boolean): Promise<void>;
-      list(prefix: string, opts: boolean): Promise<{ keys: string[] } | null>;
-    };
-  }
-}
 
 export interface ParsedActionMaps {
   actionsRaw: Record<string, string[]>;
@@ -76,6 +66,15 @@ function defaultBindings(): KeyBindings {
 }
 
 let KEYBINDS: KeyBindings = defaultBindings();
+
+registerConfig({
+  key: 'keybinds',
+  serialize: () => KEYBINDS,
+  // Merge over the defaults rather than replacing outright, so a preset saved
+  // before a new action existed still leaves that action at its default chord
+  // instead of undefined.
+  deserialize: data => { KEYBINDS = { ...defaultBindings(), ...(data as Partial<KeyBindings>) }; }
+});
 
 // Human-readable labels for the UI
 const ACTION_LABELS: Record<ActionName, string> = {
@@ -296,43 +295,6 @@ function codeToLabel(code: string): string {
 }
 export function chordToLabel(chord: KeyChord): string {
   return chord.map(codeToLabel).join('+');
-}
-
-// ---- Persistence: artifact storage when available, file export/import otherwise ----
-export const hasArtifactStorage = typeof window !== 'undefined' && typeof window.storage === 'object' && window.storage !== null;
-const PRESET_PREFIX = 'control-preset:';
-
-export async function savePreset(name: string): Promise<void> {
-  if (!hasArtifactStorage) throw new Error('no-storage');
-  await window.storage!.set(PRESET_PREFIX + name, JSON.stringify(KEYBINDS), false);
-}
-export async function loadPreset(name: string): Promise<void> {
-  if (!hasArtifactStorage) throw new Error('no-storage');
-  const res = await window.storage!.get(PRESET_PREFIX + name, false);
-  if (!res) throw new Error('Preset not found.');
-  KEYBINDS = JSON.parse(res.value);
-}
-export async function deletePreset(name: string): Promise<void> {
-  if (!hasArtifactStorage) throw new Error('no-storage');
-  await window.storage!.delete(PRESET_PREFIX + name, false);
-}
-export async function listPresets(): Promise<string[]> {
-  if (!hasArtifactStorage) throw new Error('no-storage');
-  const res = await window.storage!.list(PRESET_PREFIX, false);
-  return (res && res.keys ? res.keys : []).map(k => k.slice(PRESET_PREFIX.length));
-}
-
-export function exportToFile(name: string): void {
-  const blob = new Blob([JSON.stringify(KEYBINDS, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = (name || 'control-preset') + '.json';
-  a.click();
-  URL.revokeObjectURL(url);
-}
-export function importFromFileText(text: string): void {
-  KEYBINDS = JSON.parse(text);
 }
 
 export function getBindings(): KeyBindings {

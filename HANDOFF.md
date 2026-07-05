@@ -182,10 +182,52 @@ exactly as if no joystick code existed.
 
 1. **`input/controlsModule.ts`** — digital key chords (`KEYBINDS[action] =
    [[code,...], ...]`, OR of ANDs). Drives `isActive(action)` /
-   `chordJustPressed(action, code)`. Supports save/load presets (via
-   `window.storage` if this happens to run as a Claude artifact, else file
-   export/import — see `hasArtifactStorage`), and importing SC's
-   `actionmaps.xml` **keyboard (`kb1_`) rebinds only**.
+   `chordJustPressed(action, code)`, and importing SC's `actionmaps.xml`
+   **keyboard (`kb1_`) rebinds only**.
+
+### Control presets: a generic config registry
+
+Presets (save/load/delete/export/import, plus auto-restoring the last one
+chosen at startup) are **not** hardcoded to keybinds — they cover *every*
+registered input config generically, so adding or removing a config item
+never touches the preset code:
+
+- **`input/configRegistry.ts`** — the backbone. Each config-owning module
+  calls `registerConfig({ key, serialize, deserialize })` once at import
+  time. `serializeAllConfig()`/`deserializeAllConfig(data)` just loop the
+  registry — neither knows what's actually inside each entry.
+  `onConfigApplied(fn)` lets a UI module subscribe to "a preset was just
+  loaded" without the preset UI needing to know that module exists.
+- **`input/presetStore.ts`** — the actual localStorage/file persistence
+  (`hasPresetStorage`, `savePreset`/`loadPreset`/`deletePreset`/
+  `listPresets`, `restoreLastPreset` + `vector_last_preset`,
+  `exportToFile`/`importFromFileText`). Operates purely on
+  `serializeAllConfig()`/`deserializeAllConfig()` — it has zero knowledge of
+  keybinds, joystick, or mouse settings specifically. Also migrates the
+  pre-registry preset shape (a bare `KeyBindings` object with no wrapper) by
+  detecting the absence of any known top-level key and wrapping it as
+  `{ keybinds: ... }`.
+- Currently registered: `controlsModule.ts` → key `'keybinds'` (merges over
+  `defaultBindings()` so a new action added later isn't left `undefined` by
+  an older preset); `deviceState.ts` → `'axisMap'` + `'buttonMap'` +
+  `'scDevices'`; `mouseLook.ts` → `'mouseLook'` (`sensitivity`/`invertY`/
+  `deadzone`). `bindingsTableUI.ts` and `mouseCapture.ts` each subscribe via
+  `onConfigApplied` to refresh their own DOM when a preset lands.
+- `scDevices` looks like session-detected metadata (it's populated by
+  parsing an actionmaps.xml import) but it's load-bearing, not cosmetic: an
+  XML-derived axis binding only stores an `instance` number, and
+  `joystickAxes.ts` resolves that to a vid/pid via `getScDevices()`. Leaving
+  it out of the preset (as an earlier version of this feature did) silently
+  breaks every non-manually-captured axis binding on reload — the binding
+  still *shows* as bound in the table, it just reads `null` forever because
+  `getScDevices().find(...)` has nothing to find. Manually-captured axis/
+  button bindings (`{vid, pid, ..., manual: true}` / `ButtonBinding`) don't
+  have this problem since they bake in the vid/pid directly.
+- To add a new persisted setting: register it with `configRegistry` from
+  wherever it already lives, and (if it has on-screen controls) subscribe to
+  `onConfigApplied` to refresh them. `presetsUI.ts`/`presetStore.ts` need no
+  changes. See `tests/presetStore.test.ts` for a registry round-trip test
+  that proves this (it registers an ad-hoc config entry mid-test).
 
 2. **`input/joystickAxes.ts` + `input/gamepadModule.ts`** — analog.
    `parseJoystickAxisBindings` (in `controlsModule.ts`) pulls real joystick

@@ -8,6 +8,8 @@
 // lock lifecycle; we just react to it via 'pointerlockchange'.
 // =====================================================================
 
+import { registerConfig } from './configRegistry';
+
 export interface MouseLookInput {
   pitch: number;
   yaw: number;
@@ -100,3 +102,20 @@ export function getDeadzone(): number {
 export function setDeadzone(v: number): void {
   deadzone = v;
 }
+
+interface MouseLookConfig {
+  sensitivity: number;
+  invertY: boolean;
+  deadzone: number;
+}
+registerConfig({
+  key: 'mouseLook',
+  serialize: (): MouseLookConfig => ({ sensitivity, invertY, deadzone }),
+  deserialize: data => {
+    const d = data as Partial<MouseLookConfig> | null | undefined;
+    if (!d) return;
+    if (typeof d.sensitivity === 'number') sensitivity = d.sensitivity;
+    if (typeof d.invertY === 'boolean') invertY = d.invertY;
+    if (typeof d.deadzone === 'number') deadzone = d.deadzone;
+  }
+});

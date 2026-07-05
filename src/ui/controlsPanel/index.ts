@@ -1,5 +1,5 @@
 import { initBindingsTableUI, renderBindings } from './bindingsTableUI';
-import { initPresetsUI, refreshPresetList } from './presetsUI';
+import { initPresetsUI, refreshPresetList, restoreLastPreset } from './presetsUI';
 import { initActionmapsImportUI } from './actionmapsImportUI';
 import { initJoystickDetectionUI } from './joystickDetectionUI';
 
@@ -8,6 +8,7 @@ export function initControlsPanel(): void {
   initPresetsUI();
   initActionmapsImportUI();
   initJoystickDetectionUI();
+  restoreLastPreset();
 
   const toggleBtn = document.getElementById('ctrl-toggle') as HTMLElement;
   const closeBtn = document.getElementById('ctrl-close-btn') as HTMLElement;

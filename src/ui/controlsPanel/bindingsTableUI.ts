@@ -3,6 +3,7 @@ import * as ControlsModule from '../../input/controlsModule';
 import * as GamepadModule from '../../input/gamepadModule';
 import * as JoystickAxes from '../../input/joystickAxes';
 import { getAxisMap, bindAxis, unbindAxis, getButtonMap, bindButton, unbindButton } from '../../input/deviceState';
+import { onConfigApplied } from '../../input/configRegistry';
 
 const bindingsList = document.getElementById('ctrl-bindings-list') as HTMLElement;
 const rebindStatus = document.getElementById('ctrl-rebind-status') as HTMLElement;
@@ -320,6 +321,10 @@ export function renderBindings(): void {
     });
   });
 }
+
+// Keeps the table in sync whenever a control preset is loaded/imported/restored,
+// without the preset UI needing to know keybinds/joystick bindings exist.
+onConfigApplied(renderBindings);
 
 export function initBindingsTableUI(): void {
   // capture the next key press while a rebind is pending, before it reaches game input

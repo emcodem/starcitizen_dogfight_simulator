@@ -55,12 +55,14 @@ src/scenarios/runtime.ts        — startScenario/updateScenario: enemy AI aim+f
 src/physics/step.ts             — the physics tick: input gather -> angular/linear integration -> collision -> projectiles
 src/render/render.ts            — canvas drawing (starfield, station, ships, tracers, PIP, hit-flash) + HUD DOM updates
 
-src/input/controlsModule.ts     — keybinds, actionmaps.xml keyboard parsing, chord resolution, presets
+src/input/controlsModule.ts     — keybinds, actionmaps.xml keyboard parsing, chord resolution
 src/input/deviceState.ts        — shared axisMap/buttonMap/scDevices, written only via exported mutators
 src/input/gamepadModule.ts      — thin wrapper on navigator.getGamepads()
 src/input/joystickAxes.ts       — resolves axis bindings (XML-derived or manually-captured) to live values
 src/input/joystickButtons.ts    — resolves button bindings (justPressed vs isPressed)
 src/input/mouseLook.ts          — Pointer Lock absolute mouse-flight
+src/input/configRegistry.ts     — generic registry config modules join to be included in control presets
+src/input/presetStore.ts        — control preset save/load/delete/export/import + last-preset auto-restore
 
 src/ui/scenarioMenu.ts          — main-menu overlay: scenario picker, results screen
 src/ui/modeToggle.ts            — clickable COUPLED/DECOUPLED HUD flag

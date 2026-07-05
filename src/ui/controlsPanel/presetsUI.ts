@@ -1,5 +1,4 @@
-import * as ControlsModule from '../../input/controlsModule';
-import { renderBindings } from './bindingsTableUI';
+import * as PresetStore from '../../input/presetStore';
 
 const presetNameInput = document.getElementById('ctrl-preset-name') as HTMLInputElement;
 const presetSelect = document.getElementById('ctrl-preset-list') as HTMLSelectElement;
@@ -7,17 +6,29 @@ const presetStatus = document.getElementById('ctrl-preset-status') as HTMLElemen
 const presetFileStatus = document.getElementById('ctrl-preset-file-status') as HTMLElement;
 
 export async function refreshPresetList(): Promise<void> {
-  if (!ControlsModule.hasArtifactStorage) {
+  if (!PresetStore.hasPresetStorage) {
     presetSelect.innerHTML = '';
-    presetStatus.textContent = 'Browser preset storage unavailable here — use export/import file instead.';
+    presetStatus.textContent = 'Browser storage unavailable here (private browsing or storage disabled) — use export/import file instead.';
     return;
   }
   try {
-    const names = await ControlsModule.listPresets();
+    const names = await PresetStore.listPresets();
     presetSelect.innerHTML = names.map(n => `<option value="${n}">${n}</option>`).join('');
   } catch (err) {
     presetStatus.textContent = 'Could not list presets: ' + (err as Error).message;
   }
+}
+
+// Called once at startup — re-applies the last preset chosen (saved or loaded), if any.
+// Loading it (via PresetStore) already refreshes any UI that cares — see
+// configRegistry's onConfigApplied subscribers — so this only updates preset-picker UI.
+export async function restoreLastPreset(): Promise<void> {
+  const name = await PresetStore.restoreLastPreset();
+  if (!name) return;
+  presetNameInput.value = name;
+  presetStatus.textContent = `Restored preset "${name}" from last session.`;
+  await refreshPresetList();
+  presetSelect.value = name;
 }
 
 export function initPresetsUI(): void {
@@ -25,12 +36,12 @@ export function initPresetsUI(): void {
     const name = presetNameInput.value.trim();
     if (!name) { presetStatus.textContent = 'Enter a preset name first.'; return; }
     try {
-      await ControlsModule.savePreset(name);
+      await PresetStore.savePreset(name);
       presetStatus.textContent = `Saved preset "${name}".`;
       refreshPresetList();
     } catch (err) {
       presetStatus.textContent = (err as Error).message === 'no-storage'
-        ? 'Browser preset storage unavailable here — use export/import file instead.'
+        ? 'Browser storage unavailable here (private browsing or storage disabled) — use export/import file instead.'
         : 'Save failed: ' + (err as Error).message;
     }
   });
@@ -39,9 +50,8 @@ export function initPresetsUI(): void {
     const name = presetSelect.value;
     if (!name) { presetStatus.textContent = 'Select a preset first.'; return; }
     try {
-      await ControlsModule.loadPreset(name);
+      await PresetStore.loadPreset(name);
       presetStatus.textContent = `Loaded preset "${name}".`;
-      renderBindings();
     } catch (err) {
       presetStatus.textContent = 'Load failed: ' + (err as Error).message;
     }
@@ -51,7 +61,7 @@ export function initPresetsUI(): void {
     const name = presetSelect.value;
     if (!name) { presetStatus.textContent = 'Select a preset first.'; return; }
     try {
-      await ControlsModule.deletePreset(name);
+      await PresetStore.deletePreset(name);
       presetStatus.textContent = `Deleted preset "${name}".`;
       refreshPresetList();
     } catch (err) {
@@ -61,7 +71,7 @@ export function initPresetsUI(): void {
 
   document.getElementById('ctrl-export-btn')!.addEventListener('click', () => {
     const name = presetNameInput.value.trim() || 'control-preset';
-    ControlsModule.exportToFile(name);
+    PresetStore.exportToFile(name);
     presetFileStatus.textContent = `Exported "${name}.json".`;
   });
 
@@ -76,9 +86,8 @@ export function initPresetsUI(): void {
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        ControlsModule.importFromFileText(reader.result as string);
+        PresetStore.importFromFileText(reader.result as string);
         presetFileStatus.textContent = `Imported preset from "${file.name}".`;
-        renderBindings();
       } catch {
         presetFileStatus.textContent = 'Import failed: file is not a valid preset.';
       }

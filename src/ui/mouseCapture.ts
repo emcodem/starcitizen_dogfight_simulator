@@ -1,5 +1,21 @@
 import * as MouseLook from '../input/mouseLook';
 import { setFiring } from '../world/weapons';
+import { onConfigApplied } from '../input/configRegistry';
+
+function syncMouseSettingsUI(): void {
+  const sensSlider = document.getElementById('ctrl-mouse-sens') as HTMLInputElement | null;
+  if (sensSlider) sensSlider.value = String(MouseLook.getSensitivity());
+
+  const deadzoneSlider = document.getElementById('ctrl-mouse-deadzone') as HTMLInputElement | null;
+  if (deadzoneSlider) deadzoneSlider.value = String(MouseLook.getDeadzone());
+
+  const invertCheckbox = document.getElementById('ctrl-mouse-invert') as HTMLInputElement | null;
+  if (invertCheckbox) invertCheckbox.checked = MouseLook.getInvertY();
+}
+
+// Keeps the sliders in sync whenever a control preset is loaded/imported/restored,
+// without the preset UI needing to know mouse settings exist.
+onConfigApplied(syncMouseSettingsUI);
 
 export function initMouseCapture(): void {
   const hint = document.getElementById('mouse-capture-hint') as HTMLElement;
@@ -26,16 +42,14 @@ export function initMouseCapture(): void {
     if (e.button === 0) setFiring(false);
   });
 
+  syncMouseSettingsUI();
   const sensSlider = document.getElementById('ctrl-mouse-sens') as HTMLInputElement;
-  sensSlider.value = String(MouseLook.getSensitivity());
   sensSlider.addEventListener('input', e => MouseLook.setSensitivity(parseFloat((e.target as HTMLInputElement).value)));
 
   const deadzoneSlider = document.getElementById('ctrl-mouse-deadzone') as HTMLInputElement;
-  deadzoneSlider.value = String(MouseLook.getDeadzone());
   deadzoneSlider.addEventListener('input', e => MouseLook.setDeadzone(parseFloat((e.target as HTMLInputElement).value)));
 
   const invertCheckbox = document.getElementById('ctrl-mouse-invert') as HTMLInputElement;
-  invertCheckbox.checked = MouseLook.getInvertY();
   invertCheckbox.addEventListener('change', e => MouseLook.setInvertY((e.target as HTMLInputElement).checked));
 
   document.getElementById('ctrl-mouse-recenter')!.addEventListener('click', () => MouseLook.recenter());
