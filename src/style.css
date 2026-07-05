@@ -51,7 +51,23 @@ canvas { display: block; background: var(--bg); }
   cursor: pointer;
 }
 #scenario-menu-toggle:hover { border-color: var(--accent); color: var(--accent); }
-body.touch #scenario-menu-toggle { top: auto; bottom: 180px; right: 16px; }
+body.touch #scenario-menu-toggle { top: auto; bottom: 180px; right: 110px; }
+
+#fullscreen-toggle {
+  position: fixed; top: 60px; right: 148px;
+  z-index: 20;
+  background: rgba(5,10,12,0.7);
+  border: 1px solid var(--hud-dim);
+  color: var(--hud);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+#fullscreen-toggle:hover { border-color: var(--accent); color: var(--accent); }
+#fullscreen-toggle.on { border-color: var(--hud); color: var(--hud); }
+body.touch #fullscreen-toggle { top: auto; bottom: 180px; right: 230px; }
 
 .scenario-card {
   border: 1px solid var(--hud-dim);
@@ -146,7 +162,7 @@ body.touch #controls { display: none; }
   cursor: pointer;
 }
 #ctrl-toggle:hover { border-color: var(--accent); color: var(--accent); }
-body.touch #ctrl-toggle { top: auto; bottom: 180px; }
+body.touch #ctrl-toggle { top: auto; bottom: 180px; right: 16px; }
 
 #ctrl-panel {
   position: fixed; top: 60px; right: 16px;

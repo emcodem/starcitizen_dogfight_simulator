@@ -65,6 +65,7 @@ export function initFullscreenGuard(ship: Ship): void {
   // ---------- Fullscreen + Keyboard Lock (protects Ctrl+W/Q where supported) ----------
   const hint = document.getElementById('fullscreen-hint') as HTMLElement;
   const dangerHint = document.getElementById('ctrl-danger-hint') as HTMLElement;
+  const toggleBtn = document.getElementById('fullscreen-toggle') as HTMLElement;
   const keyboardLockSupported = !!(navigator.keyboard && navigator.keyboard.lock);
 
   async function enterProtectedFullscreen(): Promise<void> {
@@ -85,6 +86,8 @@ export function initFullscreenGuard(ship: Ship): void {
 
   document.addEventListener('fullscreenchange', () => {
     const inFullscreen = !!document.fullscreenElement;
+    toggleBtn.textContent = inFullscreen ? '⛶ EXIT FULLSCREEN' : '⛶ FULLSCREEN';
+    toggleBtn.classList.toggle('on', inFullscreen);
     if (inFullscreen && keyboardLockSupported) {
       hint.textContent = '✓ Ctrl+W/Q protected — Esc to exit fullscreen';
       dangerHint.style.display = 'none';
@@ -103,4 +106,12 @@ export function initFullscreenGuard(ship: Ship): void {
     hint.textContent = '⛶ Fullscreen available, but Keyboard Lock needs Chrome/Edge — still avoid Ctrl+W/Q';
   }
   hint.addEventListener('click', enterProtectedFullscreen);
+
+  toggleBtn.addEventListener('click', () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      enterProtectedFullscreen();
+    }
+  });
 }
