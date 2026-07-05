@@ -97,10 +97,17 @@ export function integrateFlight(body: FlightBody, input: FlightInputs, dt: numbe
   body.vel.z += accel.z * dt;
 
   if (!input.decoupled) {
-    const drag = t.linearDrag;
-    body.vel.x -= body.vel.x * drag * dt;
-    body.vel.y -= body.vel.y * drag * dt;
-    body.vel.z -= body.vel.z * drag * dt;
+    // brake's decelerate() above already counter-thrusts at the ship's own max rate for whichever
+    // axis is moving — stacking the passive coupled-mode drag on top of that let full brake
+    // decelerate harder than the ship's strongest thruster could ever accelerate it (retro/main
+    // thrust decel plus drag-at-speed together exceeded either alone). Skip the passive drag while
+    // actively braking so total deceleration stays bounded by real thrust, same as normal thrust.
+    if (!input.brake) {
+      const drag = t.linearDrag;
+      body.vel.x -= body.vel.x * drag * dt;
+      body.vel.y -= body.vel.y * drag * dt;
+      body.vel.z -= body.vel.z * drag * dt;
+    }
 
     // flight computer speed limiter: hard-caps velocity at SCM speed (or the ship's separate,
     // lower reverse-speed cap when actually flying backward relative to its own nose), raised

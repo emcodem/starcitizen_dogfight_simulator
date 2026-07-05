@@ -428,9 +428,10 @@ function droneSpeedMult(aggressiveness: number): number {
   return 0.6 + aggressiveness * 1.2;
 }
 
-export function spawnOrbitState(aggressiveness: number = 0.5): OrbitState {
+export function spawnOrbitState(center: Vec3, aggressiveness: number = 0.5): OrbitState {
   const { right, up } = randomPerpendicularPair();
   return {
+    center: { x: center.x, y: center.y, z: center.z },
     radius: randRange(ORBITER_TUNING.minRadius, ORBITER_TUNING.maxRadius),
     angularSpeed: randRange(ORBITER_TUNING.minAngularSpeed, ORBITER_TUNING.maxAngularSpeed)
       * droneSpeedMult(aggressiveness) * (Math.random() < 0.5 ? -1 : 1),
@@ -441,29 +442,29 @@ export function spawnOrbitState(aggressiveness: number = 0.5): OrbitState {
   };
 }
 
-// Advances the orbit and re-derives pos/vel/quat from it — vel is the analytic derivative of the
-// position formula (tangential orbit term plus the player's own velocity, since the orbit center
-// is the player's *current* pos and so translates with them), not a finite difference, so
-// computeLeadPoint gets a real velocity to lead against instead of one frame of jitter. Omitting
-// the player.vel term here previously made the lead point (and therefore the PIP/ESP) wrong
-// whenever the player wasn't perfectly stationary.
-export function orbiterThink(enemy: EnemyShip, player: Ship, dt: number): void {
+// Advances the orbit and re-derives pos/vel/quat from it around the fixed `orbit.center` (set at
+// spawn/respawn — see spawnOrbitState) — NOT the player's live position, so flying toward or away
+// from the ring actually changes the distance to it instead of the orbit re-centering underneath
+// you every tick and holding you at `radius` forever. vel is the analytic derivative of the
+// position formula (the tangential orbit term), not a finite difference, so computeLeadPoint gets
+// a real velocity to lead against instead of one frame of jitter.
+export function orbiterThink(enemy: EnemyShip, dt: number): void {
   const orbit = enemy.orbit;
   if (!orbit) return;
   orbit.phase += orbit.angularSpeed * dt;
 
   const cosP = Math.cos(orbit.phase), sinP = Math.sin(orbit.phase);
-  const { planeRight: r, planeUp: u, radius, angularSpeed } = orbit;
+  const { center, planeRight: r, planeUp: u, radius, angularSpeed } = orbit;
   enemy.pos = {
-    x: player.pos.x + radius * (cosP * r.x + sinP * u.x),
-    y: player.pos.y + radius * (cosP * r.y + sinP * u.y),
-    z: player.pos.z + radius * (cosP * r.z + sinP * u.z)
+    x: center.x + radius * (cosP * r.x + sinP * u.x),
+    y: center.y + radius * (cosP * r.y + sinP * u.y),
+    z: center.z + radius * (cosP * r.z + sinP * u.z)
   };
   const tangential = radius * angularSpeed;
   enemy.vel = {
-    x: player.vel.x + tangential * (-sinP * r.x + cosP * u.x),
-    y: player.vel.y + tangential * (-sinP * r.y + cosP * u.y),
-    z: player.vel.z + tangential * (-sinP * r.z + cosP * u.z)
+    x: tangential * (-sinP * r.x + cosP * u.x),
+    y: tangential * (-sinP * r.y + cosP * u.y),
+    z: tangential * (-sinP * r.z + cosP * u.z)
   };
   enemy.quat = lookAtQuat(enemy.vel);
   // pos/vel above are fully recomputed from the orbit formula every tick (not integrated), so the

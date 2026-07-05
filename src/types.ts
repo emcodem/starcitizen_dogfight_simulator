@@ -67,13 +67,17 @@ export type EnemyBehavior =
   | 'turret'   // stationary, just rotates in place to track and fire — see scenarios/runtime.ts
   | 'fighter'  // full Newtonian flight, driven by combat/enemyAI.ts through physics/flightModel.ts
   | 'chaser'   // holds station behind the player and fires — see combat/enemyAI.ts chaserThink
-  | 'orbiter'  // circles the player at a fixed radius, harmless — see combat/enemyAI.ts orbiterThink
+  | 'orbiter'  // circles a fixed point near the player at a fixed radius, harmless — see combat/enemyAI.ts orbiterThink
   | 'drifter'; // straight-line pass-by, harmless, recycles once out of range — see combat/enemyAI.ts driftThink
 
-// Per-enemy state for the 'orbiter' behavior — a fixed circular path around the player's current
-// position. `planeRight`/`planeUp` are a random orthonormal pair fixed at spawn, so the ring holds
+// Per-enemy state for the 'orbiter' behavior — a fixed circular path around a world-space point
+// fixed at spawn/respawn time (near the player, but not re-centered every tick — see
+// combat/enemyAI.ts orbiterThink for why: continuously recentering on the player's live position
+// pins the drone at exactly `radius` away forever, making it impossible to close or open distance
+// by flying). `planeRight`/`planeUp` are a random orthonormal pair fixed at spawn, so the ring holds
 // a stable orientation in world space rather than tracking the player's own facing.
 export interface OrbitState {
+  center: Vec3;
   radius: number;
   angularSpeed: number; // rad/s
   phase: number;         // current angle, radians — advanced each tick

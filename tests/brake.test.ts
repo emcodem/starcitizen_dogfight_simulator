@@ -10,10 +10,11 @@ afterEach(() => {
 
 // Identity orientation: forward == +Z, right == +X, up == -Y (see math/quaternion.ts convention)
 describe('space brake', () => {
-  // decoupled mode isolates the brake's own effect — coupled mode's normal linear drag would
-  // otherwise stack on top and throw off the exact-formula assertions below (it has its own
-  // dedicated coverage elsewhere; braking-while-coupled is exercised by the "stacks with the
-  // normal coupled-mode drag" test at the bottom of this file).
+  // decoupled mode isolates the brake's own effect from the (irrelevant, here) absence of drag —
+  // coupled-mode braking uses the exact same formula, since the passive linear drag is skipped
+  // while actively braking (see the "matches decoupled braking" test at the bottom of this file);
+  // otherwise drag stacked on top of the brake's own thrust-based decel and let a full brake stop
+  // the ship harder than its strongest thruster could ever accelerate it.
 
   it('decelerates forward motion using retro thrust / mass, not a fixed decay constant', () => {
     const ship = makeShip(SHIP_TYPES[0]);
@@ -59,16 +60,16 @@ describe('space brake', () => {
     expect(ship.vel.y).toBeCloseTo(-20 + verticalDelta, 3);
   });
 
-  it('stacks with the normal coupled-mode drag rather than replacing it', () => {
+  it('matches decoupled braking exactly — passive coupled-mode drag is skipped while braking', () => {
     const ship = makeShip(SHIP_TYPES[0]); // decoupled: false, by default
     ship.vel = { x: 0, y: 0, z: 50 };
     keys['KeyX'] = true;
     const dt = 0.1;
     step(ship, dt);
-    const brakeDelta = (ship.type.linearThrust.retro / ship.type.mass) * dt;
-    const afterBrakeOnly = 50 - brakeDelta;
-    // coupled-mode drag then also reduces whatever the brake left behind
-    expect(ship.vel.z).toBeLessThan(afterBrakeOnly);
+    const expectedDelta = (ship.type.linearThrust.retro / ship.type.mass) * dt;
+    // same result as the decoupled case above — brake alone determines deceleration, never harder
+    // than the ship's own thrust rating for that axis
+    expect(ship.vel.z).toBeCloseTo(50 - expectedDelta, 3);
   });
 
   it('does nothing when not engaged', () => {

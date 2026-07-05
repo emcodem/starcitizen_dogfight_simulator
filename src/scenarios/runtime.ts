@@ -40,7 +40,7 @@ export function startScenario(config: ScenarioConfig, player: Ship): ScenarioRun
   const aggressiveness = config.droneAggressiveness ?? 0.5;
   for (const enemy of enemies) {
     if (enemy.behavior === 'orbiter') {
-      enemy.orbit = FighterAI.spawnOrbitState(aggressiveness);
+      enemy.orbit = FighterAI.spawnOrbitState(player.pos, aggressiveness);
     } else if (enemy.behavior === 'drifter') {
       const s = FighterAI.spawnDriftState(player, aggressiveness);
       enemy.pos = s.pos;
@@ -128,12 +128,12 @@ export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: numbe
           enemy.orbit.respawnTimer += dt;
           if (enemy.orbit.respawnTimer >= FighterAI.ORBITER_TUNING.respawnDelaySec) {
             enemy.health = createHealth(runtime.config.hitsToKillEnemy);
-            enemy.orbit = FighterAI.spawnOrbitState(runtime.config.droneAggressiveness ?? 0.5);
+            enemy.orbit = FighterAI.spawnOrbitState(player.pos, runtime.config.droneAggressiveness ?? 0.5);
           }
         }
         continue;
       }
-      FighterAI.orbiterThink(enemy, player, dt);
+      FighterAI.orbiterThink(enemy, dt);
       continue;
     }
 
