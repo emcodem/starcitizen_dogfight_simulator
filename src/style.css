@@ -29,8 +29,16 @@ canvas { display: block; background: var(--bg); }
 }
 #stats { top: 16px; left: 16px; min-width: 200px; }
 #controls { bottom: 16px; left: 16px; max-width: 280px; color: var(--hud-dim); }
-#mode-flag { pointer-events: auto; cursor: pointer; }
-#mode-flag:hover .value { color: var(--accent); }
+#mode-flag { pointer-events: auto; cursor: pointer; align-items: center; }
+#mode-flag .value {
+  border: 1px solid var(--hud-dim);
+  background: rgba(255,255,255,0.06);
+  padding: 2px 10px;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+}
+#mode-flag:hover .value { border-color: var(--accent); color: var(--accent); }
+#mode-flag .value.on { border-color: var(--accent); background: rgba(255,122,69,0.12); }
 #reticle-label { bottom: 16px; right: 16px; text-align: right; color: var(--hud-dim); }
 #scenario-hud { top: 16px; left: 50%; transform: translateX(-50%); text-align: center; min-width: 200px; }
 
