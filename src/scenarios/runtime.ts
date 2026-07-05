@@ -37,11 +37,12 @@ export function startScenario(config: ScenarioConfig, player: Ship): ScenarioRun
 
   // 'orbiter'/'drifter' spawns don't fly from their config pos/quat — they get a fresh randomized
   // flight path right away, same as how 'chaser'/'fighter' spawns immediately take over steering.
+  const aggressiveness = config.droneAggressiveness ?? 0.5;
   for (const enemy of enemies) {
     if (enemy.behavior === 'orbiter') {
-      enemy.orbit = FighterAI.spawnOrbitState();
+      enemy.orbit = FighterAI.spawnOrbitState(aggressiveness);
     } else if (enemy.behavior === 'drifter') {
-      const s = FighterAI.spawnDriftState(player);
+      const s = FighterAI.spawnDriftState(player, aggressiveness);
       enemy.pos = s.pos;
       enemy.vel = s.vel;
       enemy.quat = lookAtQuat(s.vel);
@@ -51,7 +52,7 @@ export function startScenario(config: ScenarioConfig, player: Ship): ScenarioRun
 
   return {
     config, enemies, outcome: 'active', elapsedSec: 0, gateIndex: 0,
-    stats: { shotsFired: 0, hitsLanded: 0 }, explosions: []
+    stats: { shotsFired: 0, hitsLanded: 0, kills: 0 }, explosions: []
   };
 }
 
@@ -127,7 +128,7 @@ export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: numbe
           enemy.orbit.respawnTimer += dt;
           if (enemy.orbit.respawnTimer >= FighterAI.ORBITER_TUNING.respawnDelaySec) {
             enemy.health = createHealth(runtime.config.hitsToKillEnemy);
-            enemy.orbit = FighterAI.spawnOrbitState();
+            enemy.orbit = FighterAI.spawnOrbitState(runtime.config.droneAggressiveness ?? 0.5);
           }
         }
         continue;
@@ -142,7 +143,7 @@ export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: numbe
           enemy.drift.respawnTimer += dt; // see the orbiter branch above for why this counts up
           if (enemy.drift.respawnTimer >= FighterAI.DRIFTER_TUNING.respawnDelaySec) {
             enemy.health = createHealth(runtime.config.hitsToKillEnemy);
-            const s = FighterAI.spawnDriftState(player);
+            const s = FighterAI.spawnDriftState(player, runtime.config.droneAggressiveness ?? 0.5);
             enemy.pos = s.pos;
             enemy.vel = s.vel;
             enemy.quat = lookAtQuat(s.vel);
@@ -153,7 +154,7 @@ export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: numbe
       }
       const outOfRange = FighterAI.driftThink(enemy, player, dt);
       if (outOfRange) {
-        const s = FighterAI.spawnDriftState(player);
+        const s = FighterAI.spawnDriftState(player, runtime.config.droneAggressiveness ?? 0.5);
         enemy.pos = s.pos;
         enemy.vel = s.vel;
         enemy.quat = lookAtQuat(s.vel);
@@ -185,6 +186,7 @@ export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: numbe
   }
 
   resolveHits(projectiles, player, runtime.enemies, () => runtime.stats.hitsLanded++, enemy => {
+    runtime.stats.kills++;
     runtime.explosions.push({ pos: { x: enemy.pos.x, y: enemy.pos.y, z: enemy.pos.z }, timer: ENEMY_EXPLOSION_DURATION });
   });
 
@@ -199,7 +201,10 @@ export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: numbe
   } else if (runtime.config.winCondition === 'destroy') {
     if (runtime.enemies.every(e => e.health.points <= 0)) runtime.outcome = 'won';
   } else if (runtime.config.winCondition === 'survive') {
-    if (runtime.elapsedSec >= (runtime.config.surviveDurationSec ?? 60)) runtime.outcome = 'won';
+    // surviveDurationSec omitted means indefinite — the drill only ends when the player backs out
+    // to the menu, it never auto-wins on a timer.
+    const duration = runtime.config.surviveDurationSec;
+    if (duration !== undefined && runtime.elapsedSec >= duration) runtime.outcome = 'won';
   } else {
     // 'gates' — advance/fail against the current target gate, then check the course-complete /
     // timeout conditions. Order matters: a gate clear on the final gate should win immediately,

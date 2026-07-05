@@ -20,8 +20,19 @@ const FIGHTER_SPAWN_QUAT = lookAtQuat({ x: 0, y: 0, z: -1 }); // nose-in toward 
 const AIM_TRAINING_PLACEHOLDER_POS = { x: 0, y: 0, z: 0 };
 const AIM_TRAINING_PLACEHOLDER_QUAT = { x: 0, y: 0, z: 0, w: 1 };
 
-export const SCENARIOS: ScenarioConfig[] = [
-  {
+// User-configurable knobs exposed as sliders on the Aim Training card (see ui/scenarioMenu.ts).
+export interface AimTrainingOptions {
+  droneCount: number;            // total drones, split as evenly as possible between orbiter/drifter
+  aggressiveness: number;        // 0..1, see ScenarioConfig.droneAggressiveness
+  durationSec: number | null;    // null = indefinite (no time-based win, see runtime.ts)
+}
+
+export const AIM_TRAINING_DEFAULTS: AimTrainingOptions = { droneCount: 8, aggressiveness: 0.5, durationSec: 120 };
+
+export function buildAimTrainingScenario(opts: AimTrainingOptions = AIM_TRAINING_DEFAULTS): ScenarioConfig {
+  const orbiterCount = Math.ceil(opts.droneCount / 2);
+  const drifterCount = opts.droneCount - orbiterCount;
+  return {
     id: 'aim-training',
     name: 'Aim Training',
     description:
@@ -29,13 +40,13 @@ export const SCENARIOS: ScenarioConfig[] = [
       'Hold position (or move freely) and practice yaw/pitch tracking with ESP engaged. No lose condition — ' +
       'just an accuracy score at the end.',
     enemySpawns: [
-      ...Array.from({ length: 4 }, () => ({
+      ...Array.from({ length: orbiterCount }, () => ({
         type: SHIP_TYPES[0],
         pos: AIM_TRAINING_PLACEHOLDER_POS,
         quat: AIM_TRAINING_PLACEHOLDER_QUAT,
         behavior: 'orbiter' as const
       })),
-      ...Array.from({ length: 4 }, () => ({
+      ...Array.from({ length: drifterCount }, () => ({
         type: SHIP_TYPES[0],
         pos: AIM_TRAINING_PLACEHOLDER_POS,
         quat: AIM_TRAINING_PLACEHOLDER_QUAT,
@@ -46,8 +57,13 @@ export const SCENARIOS: ScenarioConfig[] = [
     hitsToKillPlayer: 999, // unreachable — drones never fire, this drill has no lose condition
     includeStation: false,
     winCondition: 'survive',
-    surviveDurationSec: 90
-  },
+    surviveDurationSec: opts.durationSec ?? undefined,
+    droneAggressiveness: opts.aggressiveness
+  };
+}
+
+export const SCENARIOS: ScenarioConfig[] = [
+  buildAimTrainingScenario(),
   {
     id: 'slow-turret-drill',
     name: 'Slow Turret Drill',

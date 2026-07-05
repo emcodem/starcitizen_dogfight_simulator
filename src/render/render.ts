@@ -280,6 +280,9 @@ function updateHUD(ship: Ship, scenario: ScenarioRuntime | null): void {
     const isGates = scenario.config.winCondition === 'gates';
     const isSurvive = scenario.config.winCondition === 'survive';
     (document.getElementById('scenario-hud-enemy-row') as HTMLElement).style.display = (isGates || isSurvive) ? 'none' : 'flex';
+    (document.getElementById('scenario-hud-player-row') as HTMLElement).style.display = isSurvive ? 'none' : 'flex';
+    (document.getElementById('scenario-hud-kills-row') as HTMLElement).style.display = isSurvive ? 'flex' : 'none';
+    (document.getElementById('scenario-hud-accuracy-row') as HTMLElement).style.display = isSurvive ? 'flex' : 'none';
     (document.getElementById('scenario-hud-gate-row') as HTMLElement).style.display = isGates ? 'flex' : 'none';
     (document.getElementById('scenario-hud-timer-row') as HTMLElement).style.display = (isGates || isSurvive) ? 'flex' : 'none';
 
@@ -288,10 +291,22 @@ function updateHUD(ship: Ship, scenario: ScenarioRuntime | null): void {
       document.getElementById('scenario-hud-gate')!.textContent =
         `${Math.min(scenario.gateIndex + 1, gateTotal)}/${gateTotal}`;
       const remaining = Math.max(0, (scenario.config.surviveDurationSec ?? 0) - scenario.elapsedSec);
+      document.getElementById('scenario-hud-timer-label')!.textContent = 'TIME LEFT';
       document.getElementById('scenario-hud-timer')!.textContent = `${remaining.toFixed(1)}s`;
     } else if (isSurvive) {
-      const remaining = Math.max(0, (scenario.config.surviveDurationSec ?? 0) - scenario.elapsedSec);
-      document.getElementById('scenario-hud-timer')!.textContent = `${remaining.toFixed(1)}s`;
+      const duration = scenario.config.surviveDurationSec;
+      if (duration !== undefined) {
+        const remaining = Math.max(0, duration - scenario.elapsedSec);
+        document.getElementById('scenario-hud-timer-label')!.textContent = 'TIME LEFT';
+        document.getElementById('scenario-hud-timer')!.textContent = `${remaining.toFixed(1)}s`;
+      } else {
+        document.getElementById('scenario-hud-timer-label')!.textContent = 'TIME';
+        document.getElementById('scenario-hud-timer')!.textContent = `${scenario.elapsedSec.toFixed(1)}s`;
+      }
+      document.getElementById('scenario-hud-kills')!.textContent = `${scenario.stats.kills}`;
+      const accuracy = scenario.stats.shotsFired > 0
+        ? Math.round((scenario.stats.hitsLanded / scenario.stats.shotsFired) * 100) : 0;
+      document.getElementById('scenario-hud-accuracy')!.textContent = `${accuracy}%`;
     } else {
       const enemy = scenario.enemies[0];
       const enemyHits = enemy ? enemy.health.maxPoints - enemy.health.points : 0;
@@ -299,9 +314,11 @@ function updateHUD(ship: Ship, scenario: ScenarioRuntime | null): void {
       document.getElementById('scenario-hud-enemy-hits')!.textContent = `${enemyHits}/${enemyMax}`;
     }
 
-    const playerHits = ship.health ? ship.health.maxPoints - ship.health.points : 0;
-    const playerMax = ship.health ? ship.health.maxPoints : 0;
-    document.getElementById('scenario-hud-player-hits')!.textContent = `${playerHits}/${playerMax}`;
+    if (!isSurvive) {
+      const playerHits = ship.health ? ship.health.maxPoints - ship.health.points : 0;
+      const playerMax = ship.health ? ship.health.maxPoints : 0;
+      document.getElementById('scenario-hud-player-hits')!.textContent = `${playerHits}/${playerMax}`;
+    }
   } else {
     scenarioHud.style.display = 'none';
   }

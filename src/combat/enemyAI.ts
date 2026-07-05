@@ -351,11 +351,18 @@ function randomPerpendicularPair(): { right: Vec3; up: Vec3 } {
   return { right, up };
 }
 
-export function spawnOrbitState(): OrbitState {
+// aggressiveness (0..1, see ScenarioConfig.droneAggressiveness) scales flight speed from 0.6x at 0
+// to 1.8x at 1 — the Aim Training drill's difficulty knob.
+function droneSpeedMult(aggressiveness: number): number {
+  return 0.6 + aggressiveness * 1.2;
+}
+
+export function spawnOrbitState(aggressiveness: number = 0.5): OrbitState {
   const { right, up } = randomPerpendicularPair();
   return {
     radius: randRange(ORBITER_TUNING.minRadius, ORBITER_TUNING.maxRadius),
-    angularSpeed: randRange(ORBITER_TUNING.minAngularSpeed, ORBITER_TUNING.maxAngularSpeed) * (Math.random() < 0.5 ? -1 : 1),
+    angularSpeed: randRange(ORBITER_TUNING.minAngularSpeed, ORBITER_TUNING.maxAngularSpeed)
+      * droneSpeedMult(aggressiveness) * (Math.random() < 0.5 ? -1 : 1),
     phase: Math.random() * Math.PI * 2,
     planeRight: right,
     planeUp: up,
@@ -390,7 +397,7 @@ export function orbiterThink(enemy: EnemyShip, player: Ship, dt: number): void {
   enemy.quat = lookAtQuat(enemy.vel);
 }
 
-export function spawnDriftState(player: Ship): { pos: Vec3; vel: Vec3 } {
+export function spawnDriftState(player: Ship, aggressiveness: number = 0.5): { pos: Vec3; vel: Vec3 } {
   const dir = normalize({ x: Math.random() - 0.5, y: Math.random() - 0.5, z: Math.random() - 0.5 });
   const spawnDist = randRange(DRIFTER_TUNING.minSpawnDist, DRIFTER_TUNING.maxSpawnDist);
   const pos: Vec3 = {
@@ -400,19 +407,21 @@ export function spawnDriftState(player: Ship): { pos: Vec3; vel: Vec3 } {
   };
 
   // aim roughly back at the player, offset sideways by a random miss distance so it streaks past
-  // rather than colliding
+  // rather than colliding — more aggressive drills pass closer (tighter tracking window)
   const towardPlayer = normalize({ x: player.pos.x - pos.x, y: player.pos.y - pos.y, z: player.pos.z - pos.z });
   let side = cross(towardPlayer, { x: 0, y: 1, z: 0 });
   if (Math.hypot(side.x, side.y, side.z) < 1e-6) side = cross(towardPlayer, { x: 1, y: 0, z: 0 });
   side = normalize(side);
-  const missDistance = randRange(DRIFTER_TUNING.minMissDistance, DRIFTER_TUNING.maxMissDistance) * (Math.random() < 0.5 ? -1 : 1);
+  const missDistanceMult = 1.3 - aggressiveness * 0.7; // 0 -> 1.3x (wider), 1 -> 0.6x (tighter)
+  const missDistance = randRange(DRIFTER_TUNING.minMissDistance, DRIFTER_TUNING.maxMissDistance)
+    * missDistanceMult * (Math.random() < 0.5 ? -1 : 1);
   const aimPoint: Vec3 = {
     x: player.pos.x + side.x * missDistance,
     y: player.pos.y + side.y * missDistance,
     z: player.pos.z + side.z * missDistance
   };
   const flightDir = normalize({ x: aimPoint.x - pos.x, y: aimPoint.y - pos.y, z: aimPoint.z - pos.z });
-  const speed = randRange(DRIFTER_TUNING.minSpeed, DRIFTER_TUNING.maxSpeed);
+  const speed = randRange(DRIFTER_TUNING.minSpeed, DRIFTER_TUNING.maxSpeed) * droneSpeedMult(aggressiveness);
 
   return { pos, vel: { x: flightDir.x * speed, y: flightDir.y * speed, z: flightDir.z * speed } };
 }

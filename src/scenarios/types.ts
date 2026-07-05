@@ -34,7 +34,13 @@ export interface ScenarioConfig {
   // 'survive' — Aim Training: no fail state, just wins once surviveDurationSec of elapsed time passes.
   winCondition: 'destroy' | 'gates' | 'survive';
   gatePath?: FlightGate[];       // 'gates' only
-  surviveDurationSec?: number;   // 'gates' (time limit) and 'survive' (drill length) only
+  // 'gates' (time limit): required. 'survive' (drill length): omitted means no time limit at all —
+  // the drill just runs until the player backs out to the menu (see runtime.ts's win-condition check).
+  surviveDurationSec?: number;
+  // 0..1 practice-drill difficulty knob for 'orbiter'/'drifter' spawns — scales their flight speed
+  // (and, for drifters, how close their flight line passes) via enemyAI.ts's spawnOrbitState/
+  // spawnDriftState. Unused outside the Aim Training drill. Defaults to 0.5 when omitted.
+  droneAggressiveness?: number;
 }
 
 // A brief visual burst at an enemy's position when it's destroyed — see ENEMY_EXPLOSION_DURATION
@@ -51,6 +57,6 @@ export interface ScenarioRuntime {
   failReason?: 'died' | 'missedGate' | 'timeout'; // set alongside outcome === 'lost'
   elapsedSec: number;
   gateIndex: number; // index of the next uncleared gate in config.gatePath — 'gates' scenarios only
-  stats: { shotsFired: number; hitsLanded: number }; // accuracy tracking, shown on the results screen
+  stats: { shotsFired: number; hitsLanded: number; kills: number }; // accuracy/kill tracking, shown live (Aim Training HUD) and on the results screen
   explosions: EnemyExplosion[]; // active death-effect bursts, pruned as their timers expire
 }
