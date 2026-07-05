@@ -1,6 +1,6 @@
 import type { EnemyShip, Ship, Vec3 } from '../types';
 import type { ScenarioRuntime } from '../scenarios/types';
-import { clamp } from '../math/vec';
+import { clamp, cross, normalize } from '../math/vec';
 import { computeAxes, type ShipAxes } from '../math/quaternion';
 import { STATION, isStationActive } from '../world/station';
 import { WEAPON, projectiles } from '../world/weapons';
@@ -128,10 +128,49 @@ function drawStation(cam: Camera): void {
   drawWireBox(STATION.pos, { x: h, y: h, z: h }, WORLD_AXES, cam, '#ff4d4d');
 }
 
-// Small fighter-like wireframe silhouette (Aim Training drones) — unlike drawWireBox's symmetric
+// Shifts a '#rrggbb' color toward white (percent > 0) or black (percent < 0) — used to fake
+// per-panel metal shading on the drone silhouette without any real lighting/material pipeline.
+function shadeHex(hex: string, percent: number): string {
+  const num = parseInt(hex.slice(1), 16);
+  const shadeChannel = (c: number): number =>
+    Math.round(percent >= 0 ? c + (255 - c) * percent : c * (1 + percent));
+  const r = shadeChannel((num >> 16) & 0xff);
+  const g = shadeChannel((num >> 8) & 0xff);
+  const b = shadeChannel(num & 0xff);
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+}
+
+const vecSub = (a: Vec3, b: Vec3): Vec3 => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z });
+const vecDot = (a: Vec3, b: Vec3): number => a.x * b.x + a.y * b.y + a.z * b.z;
+
+// Fixed world-space light (above and slightly ahead) that every drone's panels shade against —
+// this is what makes rotating panels catch/lose light like flat metal instead of a flat wireframe.
+const PANEL_LIGHT_DIR: Vec3 = { x: -0.35, y: 0.85, z: -0.25 };
+const PANEL_LIGHT_LEN = Math.hypot(PANEL_LIGHT_DIR.x, PANEL_LIGHT_DIR.y, PANEL_LIGHT_DIR.z);
+const PANEL_LIGHT: Vec3 = { x: PANEL_LIGHT_DIR.x / PANEL_LIGHT_LEN, y: PANEL_LIGHT_DIR.y / PANEL_LIGHT_LEN, z: PANEL_LIGHT_DIR.z / PANEL_LIGHT_LEN };
+
+// Flat-shaded color for a triangular hull panel: normal from the three corners (flipped outward
+// relative to the ship's center if needed, since winding order alone doesn't guarantee that),
+// dotted with the fixed light to get a per-panel brightness — cheap stand-in for real lighting.
+function panelShade(p1: Vec3, p2: Vec3, p3: Vec3, center: Vec3, baseColor: string): string {
+  let normal = normalize(cross(vecSub(p2, p1), vecSub(p3, p1)));
+  const centroid = { x: (p1.x + p2.x + p3.x) / 3, y: (p1.y + p2.y + p3.y) / 3, z: (p1.z + p2.z + p3.z) / 3 };
+  if (vecDot(normal, vecSub(centroid, center)) < 0) normal = { x: -normal.x, y: -normal.y, z: -normal.z };
+  const intensity = vecDot(normal, PANEL_LIGHT);
+  return shadeHex(baseColor, intensity * 0.45);
+}
+
+// Real Aegis Gladius dimensions (17.5 x 21 x 5.5 m, length x span x height), halved for the
+// center-relative offsets drawDroneSilhouette builds its wireframe from.
+const GLADIUS_HALF_LENGTH = 17.5 / 2;
+const GLADIUS_HALF_SPAN = 21 / 2;
+const GLADIUS_HALF_HEIGHT = 5.5 / 2;
+
+// Small fighter-like wireframe silhouette (Aim Training drones), sized to real Gladius dimensions
+// so nose-tail/wingtip-wingtip/top-bottom span exactly 17.5/21/5.5 m — unlike drawWireBox's symmetric
 // cuboid, this has a distinct pointed nose and swept wings so the player can read facing and bank
 // at a glance instead of just position.
-function drawDroneSilhouette(center: Vec3, h: number, axes: ShipAxes, cam: Camera, color: string): void {
+function drawDroneSilhouette(center: Vec3, axes: ShipAxes, cam: Camera, color: string): void {
   const { right, up, forward } = axes;
   const toWorld = (rx: number, ry: number, rz: number): Vec3 => ({
     x: center.x + rx * right.x + ry * up.x + rz * forward.x,
@@ -139,18 +178,46 @@ function drawDroneSilhouette(center: Vec3, h: number, axes: ShipAxes, cam: Camer
     z: center.z + rx * right.z + ry * up.z + rz * forward.z
   });
 
-  const nose = toWorld(0, 0, h * 1.3);
-  const tailTop = toWorld(0, h * 0.45, -h * 0.7);
-  const tailLeft = toWorld(-h * 0.45, -h * 0.3, -h * 0.7);
-  const tailRight = toWorld(h * 0.45, -h * 0.3, -h * 0.7);
-  const wingLeft = toWorld(-h * 1.3, 0, -h * 0.1);
-  const wingRight = toWorld(h * 1.3, 0, -h * 0.1);
+  const tailWidth = GLADIUS_HALF_SPAN * 0.35;
+  const wingZ = -GLADIUS_HALF_LENGTH * 0.15;
+  const nose = toWorld(0, 0, GLADIUS_HALF_LENGTH);
+  const tailTop = toWorld(0, GLADIUS_HALF_HEIGHT, -GLADIUS_HALF_LENGTH);
+  const tailLeft = toWorld(-tailWidth, -GLADIUS_HALF_HEIGHT, -GLADIUS_HALF_LENGTH);
+  const tailRight = toWorld(tailWidth, -GLADIUS_HALF_HEIGHT, -GLADIUS_HALF_LENGTH);
+  const wingLeft = toWorld(-GLADIUS_HALF_SPAN, 0, wingZ);
+  const wingRight = toWorld(GLADIUS_HALF_SPAN, 0, wingZ);
 
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.6;
+  // Filled, flat-shaded hull panels (actual "plates", not just tinted outlines) — each triangle's
+  // brightness comes from its own normal vs. the fixed light, so adjacent panels read as distinct
+  // faceted metal surfaces and catch/lose light as the drone rotates.
+  // Each triangle's sides must be real wireframe edges (see `edges` below) — using a diagonal
+  // that isn't one leaves a sliver of hull bounded by a real edge with no panel filling it.
+  const panels: [Vec3, Vec3, Vec3][] = [
+    [nose, tailTop, tailLeft], [nose, tailRight, tailTop],
+    [nose, wingLeft, tailLeft], [nose, tailRight, wingRight],
+    [tailTop, tailRight, tailLeft]
+  ];
+  for (const [p1, p2, p3] of panels) {
+    const proj = [p1, p2, p3].map(v => project(v.x, v.y, v.z, cam));
+    if (proj.some(p => p === null)) continue;
+    const [s1, s2, s3] = proj as ProjectedPoint[];
+    ctx.fillStyle = panelShade(p1, p2, p3, center, color);
+    ctx.beginPath();
+    ctx.moveTo(s1.x, s1.y);
+    ctx.lineTo(s2.x, s2.y);
+    ctx.lineTo(s3.x, s3.y);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Outline only the true silhouette edges — the ones bordering exactly one panel above. Edges
+  // shared by two panels (nose-tailTop, nose-tailLeft/Right, tailTop-tailLeft/Right) are interior
+  // seams between coplanar-ish faces; stroking those drew a stray line straight through the top
+  // plate whenever the two panels it joins were both facing the camera (e.g. viewed from above).
+  ctx.strokeStyle = shadeHex(color, -0.6);
+  ctx.lineWidth = 1.2;
   const edges: [Vec3, Vec3][] = [
-    [nose, tailTop], [nose, tailLeft], [nose, tailRight],
-    [tailTop, tailLeft], [tailLeft, tailRight], [tailRight, tailTop],
+    [tailLeft, tailRight],
     [nose, wingLeft], [nose, wingRight],
     [wingLeft, tailLeft], [wingRight, tailRight]
   ];
@@ -164,7 +231,7 @@ function drawEnemyHull(enemy: EnemyShip, cam: Camera): void {
   const h = enemy.type.hullRadius;
   const axes = computeAxes(enemy.quat);
   if (enemy.behavior === 'orbiter' || enemy.behavior === 'drifter' || enemy.behavior === 'cruiser') {
-    drawDroneSilhouette(enemy.pos, h, axes, cam, '#ff7a45');
+    drawDroneSilhouette(enemy.pos, axes, cam, '#ff7a45');
   } else {
     drawWireBox(enemy.pos, { x: h * 0.6, y: h * 0.2, z: h }, axes, cam, '#ff7a45');
   }
