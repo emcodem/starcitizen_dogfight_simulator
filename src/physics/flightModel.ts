@@ -2,6 +2,11 @@ import type { AngularState, Quat, ShipType, Vec3 } from '../types';
 import { clamp, addScaled } from '../math/vec';
 import { computeAxes, integrateOrientation } from '../math/quaternion';
 
+// rad/s — below this, residual angular velocity (e.g. the exponential drag tail after releasing
+// rotation input) is imperceptible, so it's snapped to zero instead of decaying forever. See the
+// usage site for why this exists instead of a shorter/different decay curve.
+const ANGULAR_STOP_THRESHOLD = 0.1;
+
 // Ship-shaped state this model reads/mutates — a subset both the player Ship and an AI-flown
 // EnemyShip satisfy, so the exact same Newtonian flight model drives both (see combat/enemyAI.ts).
 export interface FlightBody {
@@ -52,6 +57,16 @@ export function integrateFlight(body: FlightBody, input: FlightInputs, dt: numbe
   body.angVel.pitch -= (body.angVel.pitch * t.angularDrag.pitch / t.mass) * dt;
   body.angVel.yaw   -= (body.angVel.yaw   * t.angularDrag.yaw   / t.mass) * dt;
   body.angVel.roll  -= (body.angVel.roll  * t.angularDrag.roll  / t.mass) * dt;
+
+  // This drag is proportional (exponential decay), so on release it only asymptotically
+  // approaches zero and never actually arrives — the real ship's RCS reads as stopping a little
+  // more abruptly than that infinite tail. No frame-counted release trace is available to fit the
+  // real curve (no in-game indicator marks the moment input is released), so approximate it with a
+  // snap-to-zero floor once residual angVel is imperceptible, rather than guessing at a different
+  // decay shape.
+  if (Math.abs(body.angVel.pitch) < ANGULAR_STOP_THRESHOLD) body.angVel.pitch = 0;
+  if (Math.abs(body.angVel.yaw) < ANGULAR_STOP_THRESHOLD) body.angVel.yaw = 0;
+  if (Math.abs(body.angVel.roll) < ANGULAR_STOP_THRESHOLD) body.angVel.roll = 0;
 
   body.angVel.pitch = clamp(body.angVel.pitch, -maxAngVel.pitch, maxAngVel.pitch);
   body.angVel.yaw   = clamp(body.angVel.yaw,   -maxAngVel.yaw,   maxAngVel.yaw);
