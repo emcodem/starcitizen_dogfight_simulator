@@ -18,8 +18,27 @@
   </div>
 </div>
 
+<div id="scenario-menu-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:100; align-items:center; justify-content:center;">
+  <div id="scenario-menu-box" style="background:#0b1014; border:1px solid var(--hud-dim); max-width:560px; width:90%; max-height:85vh; overflow-y:auto; padding:24px 26px; color:var(--hud); font-family:var(--font-mono); font-size:13px; line-height:1.6;">
+    <div id="scenario-menu-picker">
+      <h2 style="margin:0 0 4px; font-size:16px; letter-spacing:1px; color:var(--accent); text-transform:uppercase;">Select Training Scenario</h2>
+      <div style="color:var(--hud-dim); margin-bottom:16px;">Choose a simulation to run.</div>
+      <div id="scenario-menu-list"></div>
+    </div>
+    <div id="scenario-menu-result" style="display:none"></div>
+  </div>
+</div>
+
+<button id="scenario-menu-toggle">MENU</button>
+
 <div id="hud">
   <div id="title">Vector // Flight Practice Sandbox</div>
+
+  <div class="panel" id="scenario-hud" style="display:none">
+    <div id="scenario-hud-name" style="color:var(--accent); margin-bottom:4px;"></div>
+    <div class="row"><span class="label">TARGET HITS</span><span class="value" id="scenario-hud-enemy-hits">0/0</span></div>
+    <div class="row"><span class="label">YOUR HITS</span><span class="value" id="scenario-hud-player-hits">0/0</span></div>
+  </div>
 
   <div class="panel" id="stats">
     <div class="row"><span class="label">THROTTLE</span><span class="value" id="s-throttle">0%</span></div>

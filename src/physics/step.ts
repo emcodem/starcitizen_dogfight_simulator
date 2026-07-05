@@ -6,7 +6,7 @@ import * as GamepadModule from '../input/gamepadModule';
 import * as JoystickAxes from '../input/joystickAxes';
 import * as JoystickButtons from '../input/joystickButtons';
 import * as MouseLook from '../input/mouseLook';
-import { STATION } from '../world/station';
+import { STATION, isStationActive } from '../world/station';
 import { updateProjectiles } from '../world/weapons';
 import { resetShip } from '../ship/shipState';
 
@@ -191,17 +191,19 @@ export function step(ship: Ship, dt: number): void {
   ship.pos.y += ship.vel.y * dt;
   ship.pos.z += ship.vel.z * dt;
 
-  // --- Collision check against the station ---
-  const dStation = Math.hypot(
-    ship.pos.x - STATION.pos.x,
-    ship.pos.y - STATION.pos.y,
-    ship.pos.z - STATION.pos.z
-  );
-  if (dStation < STATION.collisionRadius) {
-    ship.exploding = true;
-    ship.explosionTimer = 1.0;
-    ship.vel = { x: 0, y: 0, z: 0 };
-    ship.angVel = { pitch: 0, yaw: 0, roll: 0 };
+  // --- Collision check against the station (skipped when a scenario hides it) ---
+  if (isStationActive()) {
+    const dStation = Math.hypot(
+      ship.pos.x - STATION.pos.x,
+      ship.pos.y - STATION.pos.y,
+      ship.pos.z - STATION.pos.z
+    );
+    if (dStation < STATION.collisionRadius) {
+      ship.exploding = true;
+      ship.explosionTimer = 1.0;
+      ship.vel = { x: 0, y: 0, z: 0 };
+      ship.angVel = { pitch: 0, yaw: 0, roll: 0 };
+    }
   }
 
   updateProjectiles(dt, ship);

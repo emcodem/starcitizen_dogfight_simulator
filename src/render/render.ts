@@ -1,9 +1,13 @@
-import type { Ship, Vec3 } from '../types';
+import type { EnemyShip, Ship, Vec3 } from '../types';
+import type { ScenarioRuntime } from '../scenarios/types';
 import { clamp } from '../math/vec';
 import { computeAxes, type ShipAxes } from '../math/quaternion';
-import { STATION } from '../world/station';
+import { STATION, isStationActive } from '../world/station';
 import { WEAPON, projectiles } from '../world/weapons';
+import { computeLeadPoint } from '../combat/leadIndicator';
 import * as MouseLook from '../input/mouseLook';
+
+const PIP_RANGE = 1500; // meters — the PIP only shows once the target is this close
 
 interface Camera {
   pos: Vec3;
@@ -95,8 +99,9 @@ function drawProjectiles(cam: Camera): void {
     const tailP = project(tail.x, tail.y, tail.z, cam);
     if (!head) continue;
     const fade = clamp(1 - pr.age / WEAPON.lifetime, 0.15, 1);
+    const tracerColor = pr.owner === 'enemy' ? '255, 90, 90' : '255, 230, 150';
     if (tailP) {
-      ctx.strokeStyle = `rgba(255, 230, 150, ${fade.toFixed(3)})`;
+      ctx.strokeStyle = `rgba(${tracerColor}, ${fade.toFixed(3)})`;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(tailP.x, tailP.y);
@@ -110,22 +115,63 @@ function drawProjectiles(cam: Camera): void {
   }
 }
 
-function drawStation(cam: Camera): void {
-  const p = STATION.pos, h = STATION.halfSize;
+// Oriented wireframe box — center + half-extents along the given right/up/forward axes (world
+// axes for an axis-aligned box like the station; a ship's own computeAxes() for a hull silhouette
+// that rotates with it).
+function drawWireBox(center: Vec3, halfExtents: Vec3, axes: ShipAxes, cam: Camera, color: string): void {
+  const { right, up, forward } = axes;
   const corners: Vec3[] = [];
   for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
-    corners.push({ x: p.x + sx * h, y: p.y + sy * h, z: p.z + sz * h });
+    corners.push({
+      x: center.x + sx * halfExtents.x * right.x + sy * halfExtents.y * up.x + sz * halfExtents.z * forward.x,
+      y: center.y + sx * halfExtents.x * right.y + sy * halfExtents.y * up.y + sz * halfExtents.z * forward.y,
+      z: center.z + sx * halfExtents.x * right.z + sy * halfExtents.y * up.z + sz * halfExtents.z * forward.z
+    });
   }
   // 12 edges of a cube, indices into the 8 corners generated above (order: x,y,z each -1/1)
   const edges = [
     [0, 1], [0, 2], [0, 4], [1, 3], [1, 5], [2, 3],
     [2, 6], [3, 7], [4, 5], [4, 6], [5, 7], [6, 7]
   ];
-  ctx.strokeStyle = '#ff4d4d';
+  ctx.strokeStyle = color;
   ctx.lineWidth = 1.6;
   for (const [a, b] of edges) {
     drawLine3D(corners[a].x, corners[a].y, corners[a].z, corners[b].x, corners[b].y, corners[b].z, cam);
   }
+}
+
+const WORLD_AXES: ShipAxes = { right: { x: 1, y: 0, z: 0 }, up: { x: 0, y: 1, z: 0 }, forward: { x: 0, y: 0, z: 1 } };
+
+function drawStation(cam: Camera): void {
+  const h = STATION.halfSize;
+  drawWireBox(STATION.pos, { x: h, y: h, z: h }, WORLD_AXES, cam, '#ff4d4d');
+}
+
+function drawEnemyHull(enemy: EnemyShip, cam: Camera): void {
+  if (enemy.health.points <= 0) return;
+  const h = enemy.type.hullRadius;
+  drawWireBox(enemy.pos, { x: h * 0.6, y: h * 0.2, z: h }, computeAxes(enemy.quat), cam, '#ff7a45');
+}
+
+function drawPip(ship: Ship, scenario: ScenarioRuntime, cam: Camera): void {
+  const enemy = scenario.enemies.find(e => e.health.points > 0);
+  if (!enemy) return;
+  const dist = Math.hypot(enemy.pos.x - ship.pos.x, enemy.pos.y - ship.pos.y, enemy.pos.z - ship.pos.z);
+  if (dist > PIP_RANGE) return;
+  const lead = computeLeadPoint(ship.pos, ship.vel, enemy.pos, enemy.vel, WEAPON.muzzleSpeed);
+  if (!lead) return;
+  const p = project(lead.x, lead.y, lead.z, cam);
+  if (!p) return;
+  ctx.strokeStyle = '#ffe696';
+  ctx.lineWidth = 1.5;
+  const r = 8;
+  ctx.beginPath();
+  ctx.moveTo(p.x, p.y - r);
+  ctx.lineTo(p.x + r, p.y);
+  ctx.lineTo(p.x, p.y + r);
+  ctx.lineTo(p.x - r, p.y);
+  ctx.closePath();
+  ctx.stroke();
 }
 
 function drawExplosion(progress: number): void {
@@ -170,7 +216,22 @@ function drawProgradeMarker(ship: Ship, cam: Camera): void {
   }
 }
 
-function updateHUD(ship: Ship): void {
+function updateHUD(ship: Ship, scenario: ScenarioRuntime | null): void {
+  const scenarioHud = document.getElementById('scenario-hud') as HTMLElement;
+  if (scenario) {
+    scenarioHud.style.display = 'block';
+    document.getElementById('scenario-hud-name')!.textContent = scenario.config.name;
+    const enemy = scenario.enemies[0];
+    const enemyHits = enemy ? enemy.health.maxPoints - enemy.health.points : 0;
+    const enemyMax = enemy ? enemy.health.maxPoints : 0;
+    document.getElementById('scenario-hud-enemy-hits')!.textContent = `${enemyHits}/${enemyMax}`;
+    const playerHits = ship.health ? ship.health.maxPoints - ship.health.points : 0;
+    const playerMax = ship.health ? ship.health.maxPoints : 0;
+    document.getElementById('scenario-hud-player-hits')!.textContent = `${playerHits}/${playerMax}`;
+  } else {
+    scenarioHud.style.display = 'none';
+  }
+
   const speed = Math.hypot(ship.vel.x, ship.vel.y, ship.vel.z);
   document.getElementById('s-throttle')!.textContent = Math.round(ship.throttle * 100) + '%';
   (document.getElementById('bar-throttle') as HTMLElement).style.width = Math.round(Math.abs(ship.throttle) * 100) + '%';
@@ -191,7 +252,7 @@ function updateHUD(ship: Ship): void {
   flag.className = ship.decoupled ? 'on' : '';
 }
 
-export function render(ship: Ship): void {
+export function render(ship: Ship, scenario: ScenarioRuntime | null = null): void {
   ctx.fillStyle = '#05070a';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -260,14 +321,22 @@ export function render(ship: Ship): void {
   }
   ctx.globalAlpha = 1;
 
-  // static station — a fixed hazard to practice flying around and avoiding
-  drawStation(cam);
+  // static station — a fixed hazard to practice flying around and avoiding (some scenarios hide it)
+  if (isStationActive()) drawStation(cam);
+
+  // scenario opponent(s), if any
+  if (scenario) {
+    for (const enemy of scenario.enemies) drawEnemyHull(enemy, cam);
+  }
 
   // weapon tracers
   drawProjectiles(cam);
 
   // prograde velocity marker (still useful from the cockpit to read decoupled drift)
   drawProgradeMarker(ship, cam);
+
+  // predicted-impact-point — only within PIP_RANGE of a live target
+  if (scenario) drawPip(ship, scenario, cam);
 
   // explosion flash overlay on collision
   if (ship.exploding) {
@@ -279,5 +348,5 @@ export function render(ship: Ship): void {
     drawMouseReticle();
   }
 
-  updateHUD(ship);
+  updateHUD(ship, scenario);
 }

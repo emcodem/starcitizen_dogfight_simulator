@@ -35,6 +35,7 @@ export interface ShipType {
   boostRechargeRate: number;        // meter-seconds recovered per real second while not boosting
   boostMaxAngVel: AngularState;     // rotation-rate cap while boosting
   boostAngularThrust: AngularState; // == boostMaxAngVel * angularDrag per axis — same derivation as angularThrust
+  hullRadius: number;                // sphere radius (m) used for hit detection and hull silhouette drawing
 }
 
 export interface Ship {
@@ -50,6 +51,27 @@ export interface Ship {
   boosting: boolean;  // whether boost is actually in effect this frame (requested AND meter > 0)
   exploding: boolean;
   explosionTimer: number;
+  health?: Health; // present only while a combat scenario is active — absent in free flight
+}
+
+// Generic points pool for combat scenarios. Currently every hit subtracts a flat 1 point (no
+// weapon-damage model yet) — but `applyDamage` already takes an amount, so a future per-weapon
+// damage value plugs in without changing this shape.
+export interface Health {
+  points: number;
+  maxPoints: number;
+}
+
+// A scenario-spawned opponent. Deliberately not a full `Ship` — it has no throttle/decoupled/boost
+// concept, just enough state for AI aiming, movement (currently always stationary), and combat.
+export interface EnemyShip {
+  type: ShipType;
+  pos: Vec3;
+  quat: Quat;
+  vel: Vec3;
+  health: Health;
+  turnRateRadPerSec: number; // capped aim-turn rate used by rotateTowards
+  fireCooldown: number;
 }
 
 export type ActionName =
@@ -117,6 +139,7 @@ export interface Projectile {
   pos: Vec3;
   vel: Vec3;
   age: number;
+  owner: 'player' | 'enemy';
 }
 
 export interface StickAxes {

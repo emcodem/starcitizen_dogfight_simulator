@@ -10,8 +10,9 @@ but is no longer maintained — all active development happens under `src/`.
 A Newtonian, Star Citizen-inspired ship-flight sandbox for practicing combat
 maneuvers. First-person cockpit view, quaternion-based orientation (so
 pitch/roll/yaw stay correct relative to your current attitude, not a fixed
-world axis), one static station to crash into, basic projectile weapons
-(visual only, no hit detection yet), and a control system that imports a
+world axis), one static station to crash into, projectile weapons with
+owner-tagged hit detection, a data-driven training-scenario system (main
+menu → pick a scenario or free flight), and a control system that imports a
 real Star Citizen `actionmaps.xml` — including resolving keyboard, joystick
 axis, and joystick button bindings, all combined additively with mouse-look
 (keyboard/mouse/joystick all work simultaneously; the joystick is optional).
@@ -63,10 +64,20 @@ src/
                                KeyBindings, AxisBinding, ButtonBinding, GamepadSnapshot, ScDevice, StickAxes
   math/quaternion.ts         — quatMultiply, rotateVecByQuat, integrateOrientation, computeAxes
   math/vec.ts                 — clamp, addScaled, cross, normalize
-  ship/shipTypes.ts           — SHIP_TYPES (Gladius — the only ship, see tuning note below)
+  ship/shipTypes.ts           — SHIP_TYPES (Gladius — the only player-selectable ship, see tuning note below)
   ship/shipState.ts           — makeShip, resetShip
+  ship/deriveShipType.ts       — derives a ShipType variant with scaled turn rate (e.g. a scenario opponent),
+                                 recomputing angularThrust so the tuning invariant still holds
   world/station.ts            — STATION, SPAWN
-  world/weapons.ts             — WEAPON consts, projectiles array, spawnProjectile/updateProjectiles, setFiring
+  world/weapons.ts             — WEAPON consts, projectiles array, spawnProjectileFrom/updateProjectiles, setFiring
+  combat/health.ts             — Health points pool: createHealth, applyDamage (generic — ready for
+                                 per-weapon damage values later, not just "1 hit = 1 point")
+  combat/hitDetection.ts       — resolveHits: sphere-test projectiles by owner against player/enemies
+  combat/leadIndicator.ts      — computeLeadPoint: firing-solution intercept math for the PIP reticle
+  scenarios/types.ts           — ScenarioConfig / ScenarioRuntime shapes
+  scenarios/definitions.ts     — SCENARIOS list — data-driven; a new scenario is a new entry here
+  scenarios/runtime.ts         — startScenario/updateScenario: enemy AI aim+fire, hit resolution, outcome
+  ui/scenarioMenu.ts           — main-menu overlay (scenario picker, results screen, MENU button)
   input/controlsModule.ts      — keybinds, actionmaps.xml keyboard parsing, chord resolution, presets
   input/deviceState.ts         — shared axisMap/buttonMap/scDevices + mutator functions (see below)
   input/gamepadModule.ts       — thin wrapper on navigator.getGamepads()
@@ -91,6 +102,9 @@ tests/
   actionmapsParsing.test.ts     — parseActionMapsXML, parseJoystickDevices GUID decode, parseJoystickAxisBindings
   chordResolution.test.ts       — tokenToCode / inputStringToChord / chordToLabel edge cases
   shipTuning.test.ts            — regression guard: angularThrust / angularDrag ≈ maxAngVel per axis
+  deriveShipType.test.ts        — derived ship variants preserve the tuning invariant above
+  leadIndicator.test.ts         — computeLeadPoint intercept math (stationary and moving cases)
+  hitDetection.test.ts          — resolveHits damages the right side and consumes the projectile
 legacy/dogfight-sim.html        — pre-TypeScript single-file version, unmaintained, kept for reference
 ```
 
@@ -213,13 +227,39 @@ cancels whichever of the others was pending; Escape cancels the active one.
 
 ## Weapons
 
-Visual only, by design (explicit scope for now) — `world/weapons.ts`
-(`spawnProjectile`/`updateProjectiles`), `render/render.ts`
-(`drawProjectiles`). Projectiles inherit ship velocity plus a fixed muzzle
+`world/weapons.ts` (`spawnProjectileFrom`/`updateProjectiles`), `render/render.ts`
+(`drawProjectiles`). Projectiles inherit shooter velocity plus a fixed muzzle
 speed, alternate between two visual muzzle points, fade out over their
-lifetime, and **do not collide with anything**, including the station. Hit
-detection against the station (and eventually a moving target) is the
-natural next step.
+lifetime, and carry an `owner: 'player' | 'enemy'` tag. They still don't
+collide with the station — only combat/hitDetection.ts's sphere test against
+the player/enemies, which only runs while a scenario is active (see below).
+
+## Training scenarios
+
+`scenarios/definitions.ts` is the whole "content" surface — each entry is a
+data-driven `ScenarioConfig` (enemy spawns, hit-point thresholds), not new
+engine code. `scenarios/runtime.ts` is the one generic engine: per enemy it
+turns toward the player at a capped rate (`math/quaternion.ts`'s
+`lookAtQuat`/`rotateTowards`), fires once roughly nose-on, then calls
+`combat/hitDetection.ts::resolveHits` and checks the health thresholds for a
+win/loss outcome. `ui/scenarioMenu.ts` owns the picker/results overlay;
+`main.ts` gates the whole physics/render loop behind a `menu`/`playing` mode
+so nothing simulates while the menu is up.
+
+Combat state is intentionally generic, not turret-drill-specific: `Health`
+(`combat/health.ts`) is a plain points pool, and every hit currently
+subtracts a flat 1 point (`applyDamage`'s default `amount`). The natural next
+step for a real damage model is giving `WEAPON` (or a future per-ship
+loadout) a damage value and passing it into `applyDamage` — no other file
+needs to change. Similarly, `resolveHits`/`ScenarioRuntime.enemies` are
+arrays throughout, so a multi-enemy scenario is just a `ScenarioConfig` with
+more `enemySpawns`, not new logic.
+
+The PIP (predicted-impact-point) reticle (`render/render.ts`'s `drawPip`,
+math in `combat/leadIndicator.ts::computeLeadPoint`) solves the actual
+intercept problem — it accounts for the shooter's own velocity, since
+projectiles inherit it — so it stays correct if a future scenario gives the
+opponent movement, not just the current stationary drill target.
 
 ## Station / collision / explosion
 
@@ -274,8 +314,10 @@ again, that's the line to check (`keys['ArrowUp'] = ny < -0.15` etc.).
    above).
 2. Wire joystick buttons for more actions beyond decouple/space brake
    (countermeasures, shields, etc.) — extend `BUTTON_BINDABLE_ACTIONS`.
-3. Give projectiles actual hit detection against the station, then
-   damage/health.
+3. Give the enemy AI evasive/movement behavior for a harder scenario (the
+   framework already carries `EnemyShip.vel` and `computeLeadPoint` already
+   handles a moving target — only `runtime.ts`'s "stays put" assumption
+   needs to change).
 4. Add touch strafe left/right buttons.
 5. If more ships are added later, retro/strafe/vertical thrust for the
    Gladius should get real (not estimated) values too if that data ever

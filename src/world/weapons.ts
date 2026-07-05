@@ -1,7 +1,7 @@
 import type { Ship, Vec3, Projectile } from '../types';
 import { computeAxes } from '../math/quaternion';
 
-// ---------- Weapons — traveling projectiles, visuals only for now (no hit detection yet) ----------
+// ---------- Weapons — traveling projectiles. Hit detection lives in src/combat/hitDetection.ts ----------
 export const WEAPON = {
   muzzleSpeed: 1400,   // m/s, added on top of the ship's own velocity (matches SC-style ballistics)
   fireRate: 10,        // rounds per second while the trigger is held
@@ -21,18 +21,28 @@ export function setFiring(value: boolean): void {
   firing = value;
 }
 
-function spawnProjectile(ship: Ship, forward: Vec3, right: Vec3, up: Vec3): void {
+// Generic projectile spawn, usable by any shooter (player or an AI-controlled enemy) — not tied
+// to the player's `Ship` type. `owner` tags the projectile for hit-detection/rendering.
+export function spawnProjectileFrom(
+  pos: Vec3,
+  vel: Vec3,
+  forward: Vec3,
+  right: Vec3,
+  up: Vec3,
+  owner: Projectile['owner']
+): void {
   const mx = right.x * (muzzleAlternate * WEAPON.muzzleRight) - up.x * WEAPON.muzzleDown + forward.x * WEAPON.muzzleForward;
   const my = right.y * (muzzleAlternate * WEAPON.muzzleRight) - up.y * WEAPON.muzzleDown + forward.y * WEAPON.muzzleForward;
   const mz = right.z * (muzzleAlternate * WEAPON.muzzleRight) - up.z * WEAPON.muzzleDown + forward.z * WEAPON.muzzleForward;
   projectiles.push({
-    pos: { x: ship.pos.x + mx, y: ship.pos.y + my, z: ship.pos.z + mz },
+    pos: { x: pos.x + mx, y: pos.y + my, z: pos.z + mz },
     vel: {
-      x: ship.vel.x + forward.x * WEAPON.muzzleSpeed,
-      y: ship.vel.y + forward.y * WEAPON.muzzleSpeed,
-      z: ship.vel.z + forward.z * WEAPON.muzzleSpeed
+      x: vel.x + forward.x * WEAPON.muzzleSpeed,
+      y: vel.y + forward.y * WEAPON.muzzleSpeed,
+      z: vel.z + forward.z * WEAPON.muzzleSpeed
     },
-    age: 0
+    age: 0,
+    owner
   });
   muzzleAlternate *= -1;
 }
@@ -40,7 +50,7 @@ function spawnProjectile(ship: Ship, forward: Vec3, right: Vec3, up: Vec3): void
 export function updateProjectiles(dt: number, ship: Ship): void {
   if (firing && fireCooldown <= 0) {
     const { forward, right, up } = computeAxes(ship.quat);
-    spawnProjectile(ship, forward, right, up);
+    spawnProjectileFrom(ship.pos, ship.vel, forward, right, up, 'player');
     fireCooldown = 1 / WEAPON.fireRate;
   }
   fireCooldown -= dt;

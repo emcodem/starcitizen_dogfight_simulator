@@ -33,6 +33,7 @@ export const SHIP_TYPES: ShipType[] = [
     boostCapacity: 5,
     boostRechargeRate: 0.4,
     boostMaxAngVel: { pitch: 1.431, yaw: 1.082, roll: 4.189 },
-    boostAngularThrust: { pitch: 3.721, yaw: 2.813, roll: 10.891 }
+    boostAngularThrust: { pitch: 3.721, yaw: 2.813, roll: 10.891 },
+    hullRadius: 10 // approx half-length of a real Gladius (~22m), used for hit detection/drawing
   }
 ];
