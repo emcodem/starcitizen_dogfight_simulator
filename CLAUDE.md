@@ -112,6 +112,26 @@ computeAxes(ship.quat)`, no offset).
   `linearDrag`/`boostLinearDrag` applied while actively thrusting. Real
   Gladius sheds speed at a constant rate when you let go, not a decaying one
   — don't collapse this back into a single drag value.
+- **Plain forward/back thrust is governor-capped, not drag-settled** —
+  `linearDrag` for the Gladius is measured to be essentially negligible (dense
+  40ms-step traces from a dead stop, both directions, show a *constant*
+  acceleration across nearly the entire speed range — ~133 m/s² forward,
+  ~42 m/s² backward — not the shrinking rate proportional drag would
+  produce); thrust applies almost unopposed and the flight-computer speed
+  limiter (the `speed > speedCap` block, already needed for boost/overspeed
+  bleed-down) is what stops it exactly at `scmSpeed`/`scmSpeedBack`. Don't
+  reintroduce a large `linearDrag` to make it "settle" — that was tried twice
+  and contradicted the measured data both times (see shipTypes.ts's comment
+  for the numbers). Same character confirmed for lateral strafe (`strafe`,
+  no real spool) and vertical strafe (`verticalUp`/`verticalDown` — down
+  measured at exactly half of up's thrust; unlike lateral strafe, vertical
+  *does* show a real spool similar in size to main's). `mainSpoolDelay`/
+  `retroSpoolDelay`/`verticalSpoolDelay` (~0.07s / ~0.024s / ~0.066s, each
+  timed separately — they're different thrusters, don't collapse them into
+  one shared delay) gate main/retro/vertical thrust, tracked per-body via
+  `throttleSpoolTime`/`verticalSpoolTime` (`Ship`/`EnemyShip`), each reset to
+  0 whenever its respective input returns to zero — not lateral strafe or
+  boost, don't extend either delay to those without real measurement.
 - Keyboard, mouse-look, and joystick input combine **additively** (summed,
   clamped to [-1,1]) in `physics/step.ts` — never an override chain. Joystick
   stays fully optional this way.

@@ -186,6 +186,68 @@ thrust-based counter-force already decelerates at the ship's actual thrust
 rating; stacking either on top made a full brake decelerate harder than the
 ship's strongest engine could ever accelerate it).
 
+**Plain main/retro thrust is governor-capped, not drag-settled — this took
+three attempts to get right, see shipTypes.ts's comment for the full data.**
+The first two attempts (a single tail-fit exponential, then a "spool delay
+then fast exponential" model derived from just one early checkpoint) were
+both wrong, and both were caught by testing against real measured data —
+first by live-testing in the browser (the ship hit 86 m/s in ~0.1s, clearly
+broken), then by the user supplying the *full* dense 40ms-step trace from a
+dead stop instead of a single checkpoint, which showed no dead zone at all:
+the ship climbs steadily from the very first frame, at a strikingly
+*constant* ~133 m/s² acceleration across nearly the entire speed range
+(0.4s-wide segment averages: 132.5, 135, 135, 131 m/s²), stopping abruptly
+right at `scmSpeed`. A constant rate across that much of the speed range
+rules out proportional drag as the dominant force (drag would show a
+shrinking rate as speed climbs) — this is thrust applying almost unopposed,
+with the *existing* flight-computer speed limiter (the `speed > speedCap`
+block, already needed for boost/overspeed bleed-down) doing the capping,
+not a thrust/drag equilibrium. Grid-search fitting `dv/dt = thrust/mass -
+drag·v` (plus a short startup delay, plus that same governor clamp) against
+all 45 points landed on `thrust ≈ 201`, `drag` genuinely negligible (fit was
+insensitive to any value below ~0.005), `mainSpoolDelay ≈ 0.07s` —
+reproducing the whole trace to within ~3 m/s. `linearDrag` is kept at a
+small nonzero placeholder rather than exactly 0 only to dodge a literal-zero
+constant; it does essentially nothing across the whole flight envelope.
+
+Reverse thrust got its own dense 40ms-step trace (dead stop, holding
+fly-back, no boost) and shows the same governor-not-drag shape — constant
+acceleration (~42 m/s²) across nearly the whole range, then an abrupt stop
+at `scmSpeedBack`. Same fitting approach landed on `thrust ≈ 63` and
+`retroSpoolDelay ≈ 0.024s` — a real, meaningfully shorter spool than main's
+0.07s (different thruster, fit noticeably worse — ~3.6 vs ~2.3 m/s max error
+— when forced to share main's delay instead of its own), hence
+`mainSpoolDelay`/`retroSpoolDelay` are separate fields rather than one
+shared `linearSpoolDelay`, mirroring the per-axis `angularDrag` split.
+
+Lateral strafe (left/right) got the same dense-trace treatment and turned
+out different again — `thrust ≈ 145` (not main's 201), with essentially no
+spool at all (unlike main/retro's small-but-real delays). Vertical strafe
+(up) also got a dense trace and, unlike lateral, *does* show a real spool
+(`verticalSpoolDelay ≈ 0.066s`, close to main's — forcing it to 0 roughly
+triples the fit error) with `thrust ≈ 147`; down was only spot-checked, not
+traced in the same detail, and confirmed to run at exactly half of up's
+speed at matching times, so `linearThrust.verticalDown = verticalUp / 2`
+with both directions sharing one `verticalSpoolDelay`. The throttle-gating
+pattern (`throttleSpoolTime`/`spooledUp` for main/retro) was mirrored with a
+second, independent timer (`verticalSpoolTime`) for vertical, keyed off
+`strafeY` instead of `throttle` — lateral strafe (`strafeX`) has no
+timer at all, since its own trace showed no spool to model. The lesson from
+all four traces: don't assume any two thrusters on this ship share a
+number just because they're conceptually similar (main ≠ retro ≈ strafe ≠
+vertical-up ≈ 2× vertical-down) — every axis needs its own measurement.
+Boost has not been re-verified with a dense trace — no measurement backs
+extending any of these spool delays to it, though the same "does the rate
+stay constant instead of decaying" check applied to the boosted curve
+suggests it may have the same governor-not-drag character too (see task
+tracking this follow-up).
+**Lesson for next time:** a single checkpoint or a fit to only part of a
+curve is not enough to trust a derived tau/drag value against — always
+check the fit against the *earliest* available data point(s) too (ideally
+get the full dense trace up front), and treat a live-tested/simulated
+reproduction of the actual measured sequence as the bar for "done," not just
+an invariant formula checking out on paper.
+
 **Gladius is the only ship.** `SHIP_TYPES` (in `ship/shipTypes.ts`) has a
 single entry, with mass/thrust/drag values back-derived from real SCM speed
 (226 m/s) and real pitch/yaw/roll rates (68/52/200°/s) the user provided from

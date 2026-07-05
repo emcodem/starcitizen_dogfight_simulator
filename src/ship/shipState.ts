@@ -18,7 +18,9 @@ export function makeShip(type: ShipType): Ship {
     boosting: false,
     exploding: false,
     explosionTimer: 0,
-    hitFlash: 0
+    hitFlash: 0,
+    throttleSpoolTime: 0,
+    verticalSpoolTime: 0
   };
 }
 
@@ -34,5 +36,7 @@ export function resetShip(ship: Ship): void {
   ship.exploding = false;
   ship.explosionTimer = 0;
   ship.hitFlash = 0;
+  ship.throttleSpoolTime = 0;
+  ship.verticalSpoolTime = 0;
   projectiles.length = 0;
 }

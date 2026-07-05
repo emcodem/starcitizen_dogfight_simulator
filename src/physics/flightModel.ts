@@ -11,6 +11,8 @@ export interface FlightBody {
   quat: Quat;
   angVel: AngularState;
   boosting: boolean;
+  throttleSpoolTime: number; // see ShipType.mainSpoolDelay/retroSpoolDelay
+  verticalSpoolTime: number; // see ShipType.verticalSpoolDelay
 }
 
 // One tick's worth of control intent — everything the model needs to move `body`, however it was
@@ -63,17 +65,34 @@ export function integrateFlight(body: FlightBody, input: FlightInputs, dt: numbe
   const strafeY = clamp(input.strafeY, -1, 1);
   const throttle = clamp(input.throttle, -1, 1);
 
+  // Engine spool: real Gladius measured to have a short (well under a second) startup lag after a
+  // standing-start throttle press before main/retro thrust actually catches — see shipTypes.ts for
+  // the frame-by-frame data this is fit to. Forward and backward spool at different rates (they're
+  // different thrusters), so each direction gets its own delay. Timer resets the instant throttle
+  // returns to zero, so it re-spools on every fresh press from a stop, not just the very first one.
+  // Only gates main/retro (throttle) — no data suggests strafe/vertical or boost share this.
+  body.throttleSpoolTime = throttle === 0 ? 0 : body.throttleSpoolTime + dt;
+  const spoolDelay = throttle >= 0 ? t.mainSpoolDelay : t.retroSpoolDelay;
+  const spooledUp = body.boosting || body.throttleSpoolTime >= spoolDelay;
+
+  // Same idea, for vertical strafe — real Gladius also showed a short startup lag on that axis
+  // (unlike lateral strafe, which showed none) — see shipTypes.ts.
+  body.verticalSpoolTime = strafeY === 0 ? 0 : body.verticalSpoolTime + dt;
+  const verticalSpooledUp = body.boosting || body.verticalSpoolTime >= t.verticalSpoolDelay;
+
   // boosting raises main/retro thrust the same way it raises angular thrust above — without this,
   // boosting only lifted the speed *cap* while leaving thrust unchanged, and since linearDrag
   // makes unboosted thrust settle at exactly scmSpeed by construction, the ship could never
   // actually climb to a speed where the higher cap mattered.
   const mainThrust = body.boosting ? t.boostLinearThrust.main : t.linearThrust.main;
   const retroThrust = body.boosting ? t.boostLinearThrust.retro : t.linearThrust.retro;
-  const mainThrustMag = throttle >= 0 ? throttle * mainThrust : throttle * retroThrust;
+  const mainThrustMag = spooledUp ? (throttle >= 0 ? throttle * mainThrust : throttle * retroThrust) : 0;
+  const verticalThrust = strafeY >= 0 ? t.linearThrust.verticalUp : t.linearThrust.verticalDown;
+  const verticalThrustMag = verticalSpooledUp ? strafeY * verticalThrust : 0;
   const accel: Vec3 = { x: 0, y: 0, z: 0 };
   addScaled(accel, forward, mainThrustMag / t.mass);
   addScaled(accel, right, (strafeX * t.linearThrust.strafe) / t.mass);
-  addScaled(accel, up, (strafeY * t.linearThrust.vertical) / t.mass);
+  addScaled(accel, up, verticalThrustMag / t.mass);
 
   if (input.brake) {
     // Space brake: counter-thrust in whichever direction body is actually moving, using that
@@ -85,13 +104,14 @@ export function integrateFlight(body: FlightBody, input: FlightInputs, dt: numbe
       z: body.vel.x * forward.x + body.vel.y * forward.y + body.vel.z * forward.z     // longitudinal
     };
     const longitudinalThrust = localVel.z > 0 ? t.linearThrust.retro : t.linearThrust.main;
+    const brakeVerticalThrust = localVel.y > 0 ? t.linearThrust.verticalDown : t.linearThrust.verticalUp;
 
     const decelerate = (v: number, thrust: number): number => {
       const maxDelta = (thrust / t.mass) * dt;
       return Math.abs(v) <= maxDelta ? 0 : v - Math.sign(v) * maxDelta;
     };
     localVel.x = decelerate(localVel.x, t.linearThrust.strafe);
-    localVel.y = decelerate(localVel.y, t.linearThrust.vertical);
+    localVel.y = decelerate(localVel.y, brakeVerticalThrust);
     localVel.z = decelerate(localVel.z, longitudinalThrust);
 
     body.vel.x = right.x * localVel.x + up.x * localVel.y + forward.x * localVel.z;

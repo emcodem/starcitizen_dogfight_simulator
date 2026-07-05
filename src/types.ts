@@ -22,9 +22,24 @@ export interface ShipType {
   mass: number;    // gameplay-tuning mass, used as rotational inertia too — see physics/step.ts
   massKg: number;  // real-world reference mass in kg, informational only — not yet used by
                    // physics (no established conversion from this to the tuning `mass` above)
-  linearThrust: { main: number; retro: number; strafe: number; vertical: number };
+  linearThrust: { main: number; retro: number; strafe: number; verticalUp: number; verticalDown: number };
   angularThrust: AngularState;      // == maxAngVel * angularDrag per axis — see shipTypes.ts
-  linearDrag: number;                // proportional drag while actively thrusting (coupled, not boosting)
+  mainSpoolDelay: number;             // seconds of continuous forward throttle (non-boosted) before
+  retroSpoolDelay: number;            // main/retro thrust actually starts applying — a short real
+                                      // startup lag measured at the very start of a standing-start
+                                      // throttle press, separately timed for each direction (they're
+                                      // different thrusters). Only gates main/retro (throttle), not
+                                      // strafe/vertical/boost — see physics/flightModel.ts and
+                                      // shipTypes.ts
+  verticalSpoolDelay: number;        // same idea as main/retroSpoolDelay, but for vertical
+                                      // strafe (up/down share one delay — no data distinguishing
+                                      // them) — see physics/flightModel.ts and shipTypes.ts
+  linearDrag: number;                // proportional drag while actively thrusting (coupled, not
+                                      // boosting) — for the Gladius this is measured to be
+                                      // essentially negligible (thrust applies almost unopposed;
+                                      // the flight-computer speed limiter below, not drag, is what
+                                      // stops it at scmSpeed) — see shipTypes.ts. Don't assume this
+                                      // is always true for other ships without measuring first.
   boostLinearDrag: number;           // same, but while boosting — measured much lower than linearDrag
                                       // (boost trades agility for top speed, not just "more thrust") —
                                       // see shipTypes.ts
@@ -66,6 +81,9 @@ export interface Ship {
   explosionTimer: number;
   health?: Health; // present only while a combat scenario is active — absent in free flight
   hitFlash: number; // 0..1, set to 1 when the player takes a hit, decays over time (see physics/step.ts)
+  throttleSpoolTime: number; // seconds of continuous non-zero throttle so far — see
+                              // ShipType.mainSpoolDelay/retroSpoolDelay and physics/flightModel.ts
+  verticalSpoolTime: number; // same idea, for vertical strafe — see ShipType.verticalSpoolDelay
 }
 
 // Generic points pool for combat scenarios. Currently every hit subtracts a flat 1 point (no
@@ -175,6 +193,8 @@ export interface EnemyShip {
   angVel: AngularState;
   boostMeter: number;
   boosting: boolean;
+  throttleSpoolTime: number; // see Ship.throttleSpoolTime / ShipType.mainSpoolDelay/retroSpoolDelay
+  verticalSpoolTime: number; // see Ship.verticalSpoolTime / ShipType.verticalSpoolDelay
   health: Health;
   behavior: EnemyBehavior;
   turnRateRadPerSec?: number; // 'turret' only — capped aim-turn rate used by rotateTowards

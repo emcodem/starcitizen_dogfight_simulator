@@ -18,7 +18,9 @@ function makeTestShip(pos: { x: number; y: number; z: number }): Ship {
     boosting: false,
     exploding: false,
     explosionTimer: 0,
-    hitFlash: 0
+    hitFlash: 0,
+    throttleSpoolTime: 0,
+    verticalSpoolTime: 0
   };
 }
 
@@ -31,6 +33,8 @@ function makeOrbiter(radius: number, center = { x: 0, y: 0, z: 0 }): EnemyShip {
     angVel: { pitch: 0, yaw: 0, roll: 0 },
     boostMeter: 0,
     boosting: false,
+    throttleSpoolTime: 0,
+    verticalSpoolTime: 0,
     health: createHealth(3),
     behavior: 'orbiter',
     fireCooldown: 0,
@@ -116,6 +120,8 @@ describe('drifter spawn + think', () => {
       angVel: { pitch: 0, yaw: 0, roll: 0 },
       boostMeter: 0,
       boosting: false,
+      throttleSpoolTime: 0,
+      verticalSpoolTime: 0,
       health: createHealth(3),
       behavior: 'drifter',
       fireCooldown: 0,
@@ -146,6 +152,8 @@ describe('drifter spawn + think', () => {
       angVel: { pitch: 0, yaw: 0, roll: 0 },
       boostMeter: 0,
       boosting: false,
+      throttleSpoolTime: 0,
+      verticalSpoolTime: 0,
       health: createHealth(3),
       behavior: 'drifter',
       fireCooldown: 0,

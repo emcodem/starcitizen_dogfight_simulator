@@ -19,6 +19,8 @@ function makeTestShip(pos: { x: number; y: number; z: number }): Ship {
     exploding: false,
     explosionTimer: 0,
     hitFlash: 0,
+    throttleSpoolTime: 0,
+    verticalSpoolTime: 0,
     health: createHealth(50)
   };
 }
@@ -32,6 +34,8 @@ function makeTestEnemy(pos: { x: number; y: number; z: number }): EnemyShip {
     angVel: { pitch: 0, yaw: 0, roll: 0 },
     boostMeter: 0,
     boosting: false,
+    throttleSpoolTime: 0,
+    verticalSpoolTime: 0,
     health: createHealth(50),
     behavior: 'turret',
     turnRateRadPerSec: 0,

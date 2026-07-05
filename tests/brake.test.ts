@@ -55,7 +55,8 @@ describe('space brake', () => {
     const dt = 0.05;
     step(ship, dt);
     const strafeDelta = (ship.type.linearThrust.strafe / ship.type.mass) * dt;
-    const verticalDelta = (ship.type.linearThrust.vertical / ship.type.mass) * dt;
+    // moving in local "up" here, so braking uses the down-thruster's (weaker) rating to counter it
+    const verticalDelta = (ship.type.linearThrust.verticalDown / ship.type.mass) * dt;
     expect(ship.vel.x).toBeCloseTo(30 - strafeDelta, 3);
     expect(ship.vel.y).toBeCloseTo(-20 + verticalDelta, 3);
   });
