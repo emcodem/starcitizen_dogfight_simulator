@@ -47,11 +47,15 @@ export function spawnProjectileFrom(
   muzzleAlternate *= -1;
 }
 
-export function updateProjectiles(dt: number, ship: Ship): void {
+// Returns true when a new player-owned shot was spawned this tick — used to tally shotsFired
+// for the scenario accuracy stats (see scenarios/runtime.ts).
+export function updateProjectiles(dt: number, ship: Ship): boolean {
+  let firedThisTick = false;
   if (firing && fireCooldown <= 0) {
     const { forward, right, up } = computeAxes(ship.quat);
     spawnProjectileFrom(ship.pos, ship.vel, forward, right, up, 'player');
     fireCooldown = 1 / WEAPON.fireRate;
+    firedThisTick = true;
   }
   fireCooldown -= dt;
 
@@ -63,4 +67,6 @@ export function updateProjectiles(dt: number, ship: Ship): void {
     pr.age += dt;
     if (pr.age > WEAPON.lifetime) projectiles.splice(i, 1);
   }
+
+  return firedThisTick;
 }

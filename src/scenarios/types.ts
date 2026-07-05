@@ -31,9 +31,10 @@ export interface ScenarioConfig {
   // 'destroy' — the original win condition, land hitsToKillEnemy hits before taking hitsToKillPlayer.
   // 'gates' — evasion drills: win by clearing every gatePath entry in order before surviveDurationSec
   // runs out (or before flying past one outside its ring, which is an immediate loss).
-  winCondition: 'destroy' | 'gates';
+  // 'survive' — Aim Training: no fail state, just wins once surviveDurationSec of elapsed time passes.
+  winCondition: 'destroy' | 'gates' | 'survive';
   gatePath?: FlightGate[];       // 'gates' only
-  surviveDurationSec?: number;   // 'gates' only — time limit to clear the whole path
+  surviveDurationSec?: number;   // 'gates' (time limit) and 'survive' (drill length) only
 }
 
 export interface ScenarioRuntime {
@@ -43,4 +44,5 @@ export interface ScenarioRuntime {
   failReason?: 'died' | 'missedGate' | 'timeout'; // set alongside outcome === 'lost'
   elapsedSec: number;
   gateIndex: number; // index of the next uncleared gate in config.gatePath — 'gates' scenarios only
+  stats: { shotsFired: number; hitsLanded: number }; // accuracy tracking, shown on the results screen
 }

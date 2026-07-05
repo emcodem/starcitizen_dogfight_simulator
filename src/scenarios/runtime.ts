@@ -30,7 +30,22 @@ export function startScenario(config: ScenarioConfig, player: Ship): ScenarioRun
       : undefined,
     fireCooldown: 0
   }));
-  return { config, enemies, outcome: 'active', elapsedSec: 0, gateIndex: 0 };
+
+  // 'orbiter'/'drifter' spawns don't fly from their config pos/quat — they get a fresh randomized
+  // flight path right away, same as how 'chaser'/'fighter' spawns immediately take over steering.
+  for (const enemy of enemies) {
+    if (enemy.behavior === 'orbiter') {
+      enemy.orbit = FighterAI.spawnOrbitState();
+    } else if (enemy.behavior === 'drifter') {
+      const s = FighterAI.spawnDriftState(player);
+      enemy.pos = s.pos;
+      enemy.vel = s.vel;
+      enemy.quat = lookAtQuat(s.vel);
+      enemy.drift = { respawnTimer: 0 };
+    }
+  }
+
+  return { config, enemies, outcome: 'active', elapsedSec: 0, gateIndex: 0, stats: { shotsFired: 0, hitsLanded: 0 } };
 }
 
 export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: number): void {
@@ -94,6 +109,48 @@ export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: numbe
       continue;
     }
 
+    if (enemy.behavior === 'orbiter') {
+      if (enemy.health.points <= 0) {
+        if (enemy.orbit) {
+          // respawnTimer counts UP elapsed dead-time, so the very first dead frame doesn't
+          // instantly respawn it — spawnOrbitState() below resets it to 0 for the next death.
+          enemy.orbit.respawnTimer += dt;
+          if (enemy.orbit.respawnTimer >= FighterAI.ORBITER_TUNING.respawnDelaySec) {
+            enemy.health = createHealth(runtime.config.hitsToKillEnemy);
+            enemy.orbit = FighterAI.spawnOrbitState();
+          }
+        }
+        continue;
+      }
+      FighterAI.orbiterThink(enemy, player, dt);
+      continue;
+    }
+
+    if (enemy.behavior === 'drifter') {
+      if (enemy.health.points <= 0) {
+        if (enemy.drift) {
+          enemy.drift.respawnTimer += dt; // see the orbiter branch above for why this counts up
+          if (enemy.drift.respawnTimer >= FighterAI.DRIFTER_TUNING.respawnDelaySec) {
+            enemy.health = createHealth(runtime.config.hitsToKillEnemy);
+            const s = FighterAI.spawnDriftState(player);
+            enemy.pos = s.pos;
+            enemy.vel = s.vel;
+            enemy.quat = lookAtQuat(s.vel);
+            enemy.drift.respawnTimer = 0;
+          }
+        }
+        continue;
+      }
+      const outOfRange = FighterAI.driftThink(enemy, player, dt);
+      if (outOfRange) {
+        const s = FighterAI.spawnDriftState(player);
+        enemy.pos = s.pos;
+        enemy.vel = s.vel;
+        enemy.quat = lookAtQuat(s.vel);
+      }
+      continue;
+    }
+
     // 'turret' behavior — stays put (per the drill's design), just turns to face the player
     const toPlayer = {
       x: player.pos.x - enemy.pos.x,
@@ -117,13 +174,15 @@ export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: numbe
     }
   }
 
-  resolveHits(projectiles, player, runtime.enemies);
+  resolveHits(projectiles, player, runtime.enemies, () => runtime.stats.hitsLanded++);
 
   if (player.health && player.health.points <= 0) {
     runtime.outcome = 'lost';
     runtime.failReason = 'died';
   } else if (runtime.config.winCondition === 'destroy') {
     if (runtime.enemies.every(e => e.health.points <= 0)) runtime.outcome = 'won';
+  } else if (runtime.config.winCondition === 'survive') {
+    if (runtime.elapsedSec >= (runtime.config.surviveDurationSec ?? 60)) runtime.outcome = 'won';
   } else {
     // 'gates' — advance/fail against the current target gate, then check the course-complete /
     // timeout conditions. Order matters: a gate clear on the final gate should win immediately,

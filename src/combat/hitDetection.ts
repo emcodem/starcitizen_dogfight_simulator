@@ -8,7 +8,12 @@ function distance(a: Vec3, b: Vec3): number {
 // Sphere-vs-sphere hit test: enemy-owned projectiles damage the player, player-owned projectiles
 // damage whichever enemy they land inside. Consumed projectiles are removed. Generic over the
 // `enemies` array so adding more opponents to a future scenario needs no changes here.
-export function resolveHits(projectiles: Projectile[], player: Ship, enemies: EnemyShip[]): void {
+export function resolveHits(
+  projectiles: Projectile[],
+  player: Ship,
+  enemies: EnemyShip[],
+  onEnemyHit?: () => void
+): void {
   for (let i = projectiles.length - 1; i >= 0; i--) {
     const pr = projectiles[i];
 
@@ -25,6 +30,7 @@ export function resolveHits(projectiles: Projectile[], player: Ship, enemies: En
       if (enemy.health.points <= 0) continue;
       if (distance(pr.pos, enemy.pos) <= enemy.type.hullRadius) {
         applyDamage(enemy.health);
+        onEnemyHit?.();
         projectiles.splice(i, 1);
         break;
       }

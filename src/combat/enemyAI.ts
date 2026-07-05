@@ -1,7 +1,7 @@
-import type { EnemyShip, FighterAIMemory, FighterTuning, Quat, Ship, Vec3 } from '../types';
+import type { EnemyShip, FighterAIMemory, FighterTuning, OrbitState, Quat, Ship, Vec3 } from '../types';
 import type { FlightInputs } from '../physics/flightModel';
 import { computeAxes, lookAtQuat, quatMultiply } from '../math/quaternion';
-import { clamp, normalize } from '../math/vec';
+import { clamp, cross, normalize } from '../math/vec';
 import { computeLeadPoint } from './leadIndicator';
 import { WEAPON } from '../world/weapons';
 
@@ -314,4 +314,115 @@ export function chaserThink(enemy: EnemyShip, player: Ship): FighterDecision {
     wantsToFire: dist <= CHASER_TUNING.fireRange && angleBetween(enemyForward, aimDir) < 0.3,
     aimDir
   };
+}
+
+// ===========================================================================
+// OrbiterAI / DrifterAI — harmless practice targets for the Aim Training drill (see
+// scenarios/definitions.ts). Neither ever fires; scenarios/runtime.ts's dispatch for these two
+// behaviors has no firing logic at all. Both respawn a short while after being shot down so the
+// target pool stays full for the whole drill instead of thinning out.
+// ===========================================================================
+export const ORBITER_TUNING = {
+  minRadius: 150, maxRadius: 400,     // meters from the player
+  minAngularSpeed: 0.15, maxAngularSpeed: 0.35, // rad/s
+  respawnDelaySec: 1.5
+};
+
+export const DRIFTER_TUNING = {
+  minSpawnDist: 500, maxSpawnDist: 900,  // meters from the player at spawn
+  minSpeed: 90, maxSpeed: 160,           // m/s, constant for the whole pass
+  minMissDistance: 40, maxMissDistance: 150, // meters — how far off-center the flight line passes the player
+  despawnDist: 1400,                     // meters — recycles once it's flown this far past the player
+  respawnDelaySec: 1.0
+};
+
+function randRange(min: number, max: number): number {
+  return min + Math.random() * (max - min);
+}
+
+// A random axis perpendicular pair, used as the fixed orbit plane — kept stable in world space
+// (not tied to the player's facing) so the ring doesn't swing around when the player looks away.
+function randomPerpendicularPair(): { right: Vec3; up: Vec3 } {
+  const axis = normalize({ x: Math.random() - 0.5, y: Math.random() - 0.5, z: Math.random() - 0.5 });
+  let right = cross(axis, { x: 0, y: 1, z: 0 });
+  if (Math.hypot(right.x, right.y, right.z) < 1e-6) right = cross(axis, { x: 1, y: 0, z: 0 });
+  right = normalize(right);
+  const up = normalize(cross(axis, right));
+  return { right, up };
+}
+
+export function spawnOrbitState(): OrbitState {
+  const { right, up } = randomPerpendicularPair();
+  return {
+    radius: randRange(ORBITER_TUNING.minRadius, ORBITER_TUNING.maxRadius),
+    angularSpeed: randRange(ORBITER_TUNING.minAngularSpeed, ORBITER_TUNING.maxAngularSpeed) * (Math.random() < 0.5 ? -1 : 1),
+    phase: Math.random() * Math.PI * 2,
+    planeRight: right,
+    planeUp: up,
+    respawnTimer: 0
+  };
+}
+
+// Advances the orbit and re-derives pos/vel/quat from it — vel is the analytic tangential
+// derivative of the position formula, not a finite difference, so computeLeadPoint gets a real
+// velocity to lead against instead of one frame of jitter.
+export function orbiterThink(enemy: EnemyShip, player: Ship, dt: number): void {
+  const orbit = enemy.orbit;
+  if (!orbit) return;
+  orbit.phase += orbit.angularSpeed * dt;
+
+  const cosP = Math.cos(orbit.phase), sinP = Math.sin(orbit.phase);
+  const { planeRight: r, planeUp: u, radius, angularSpeed } = orbit;
+  enemy.pos = {
+    x: player.pos.x + radius * (cosP * r.x + sinP * u.x),
+    y: player.pos.y + radius * (cosP * r.y + sinP * u.y),
+    z: player.pos.z + radius * (cosP * r.z + sinP * u.z)
+  };
+  const tangential = radius * angularSpeed;
+  enemy.vel = {
+    x: tangential * (-sinP * r.x + cosP * u.x),
+    y: tangential * (-sinP * r.y + cosP * u.y),
+    z: tangential * (-sinP * r.z + cosP * u.z)
+  };
+  enemy.quat = lookAtQuat(enemy.vel);
+}
+
+export function spawnDriftState(player: Ship): { pos: Vec3; vel: Vec3 } {
+  const dir = normalize({ x: Math.random() - 0.5, y: Math.random() - 0.5, z: Math.random() - 0.5 });
+  const spawnDist = randRange(DRIFTER_TUNING.minSpawnDist, DRIFTER_TUNING.maxSpawnDist);
+  const pos: Vec3 = {
+    x: player.pos.x + dir.x * spawnDist,
+    y: player.pos.y + dir.y * spawnDist,
+    z: player.pos.z + dir.z * spawnDist
+  };
+
+  // aim roughly back at the player, offset sideways by a random miss distance so it streaks past
+  // rather than colliding
+  const towardPlayer = normalize({ x: player.pos.x - pos.x, y: player.pos.y - pos.y, z: player.pos.z - pos.z });
+  let side = cross(towardPlayer, { x: 0, y: 1, z: 0 });
+  if (Math.hypot(side.x, side.y, side.z) < 1e-6) side = cross(towardPlayer, { x: 1, y: 0, z: 0 });
+  side = normalize(side);
+  const missDistance = randRange(DRIFTER_TUNING.minMissDistance, DRIFTER_TUNING.maxMissDistance) * (Math.random() < 0.5 ? -1 : 1);
+  const aimPoint: Vec3 = {
+    x: player.pos.x + side.x * missDistance,
+    y: player.pos.y + side.y * missDistance,
+    z: player.pos.z + side.z * missDistance
+  };
+  const flightDir = normalize({ x: aimPoint.x - pos.x, y: aimPoint.y - pos.y, z: aimPoint.z - pos.z });
+  const speed = randRange(DRIFTER_TUNING.minSpeed, DRIFTER_TUNING.maxSpeed);
+
+  return { pos, vel: { x: flightDir.x * speed, y: flightDir.y * speed, z: flightDir.z * speed } };
+}
+
+// Ballistic straight-line flight, no steering — orientation just faces the direction of travel.
+// Returns true once it's flown far enough past the player that it should be recycled.
+export function driftThink(enemy: EnemyShip, player: Ship, dt: number): boolean {
+  enemy.pos = {
+    x: enemy.pos.x + enemy.vel.x * dt,
+    y: enemy.pos.y + enemy.vel.y * dt,
+    z: enemy.pos.z + enemy.vel.z * dt
+  };
+  enemy.quat = lookAtQuat(enemy.vel);
+  const dist = Math.hypot(enemy.pos.x - player.pos.x, enemy.pos.y - player.pos.y, enemy.pos.z - player.pos.z);
+  return dist > DRIFTER_TUNING.despawnDist;
 }

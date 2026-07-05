@@ -10,6 +10,7 @@ import { initTouchControls } from './ui/touchControls';
 import { initMouseCapture, initKeyboardFireFallback } from './ui/mouseCapture';
 import { initControlsPanel } from './ui/controlsPanel';
 import { initModeToggle } from './ui/modeToggle';
+import { initEspSettingsUI } from './ui/espSettingsUI';
 import { initScenarioMenu, showScenarioResult } from './ui/scenarioMenu';
 import { startScenario, updateScenario } from './scenarios/runtime';
 import type { ScenarioConfig, ScenarioRuntime } from './scenarios/types';
@@ -33,6 +34,7 @@ initMouseCapture();
 initKeyboardFireFallback();
 initControlsPanel();
 initModeToggle(ship);
+initEspSettingsUI();
 
 // ---------- Scenario / menu state machine — sim only runs while 'playing' ----------
 type Mode = 'menu' | 'playing';
@@ -60,12 +62,12 @@ function loop(now: number): void {
   last = now;
   try {
     if (mode === 'playing') {
-      step(ship, dt);
+      step(ship, dt, activeRuntime);
       if (activeRuntime) {
         updateScenario(activeRuntime, ship, dt);
         if (activeRuntime.outcome !== 'active') {
           mode = 'menu';
-          showScenarioResult(activeRuntime.outcome, activeRuntime.config, activeRuntime.failReason);
+          showScenarioResult(activeRuntime.outcome, activeRuntime.config, activeRuntime.failReason, activeRuntime.stats);
         }
       }
       render(ship, activeRuntime);

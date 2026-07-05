@@ -4,15 +4,10 @@ import { clamp } from '../math/vec';
 import { computeAxes, type ShipAxes } from '../math/quaternion';
 import { STATION, isStationActive } from '../world/station';
 import { WEAPON, projectiles } from '../world/weapons';
-import { computeLeadPoint } from '../combat/leadIndicator';
 import * as MouseLook from '../input/mouseLook';
-
-const PIP_RANGE = 1500; // meters — the PIP only shows once the target is this close
-
-interface Camera {
-  pos: Vec3;
-  axes: ShipAxes;
-}
+import * as EspAssist from '../combat/espAssist';
+import { findActivePip } from '../combat/pipTargeting';
+import { project as projectShared, type Camera, type ProjectedPoint } from './projection';
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
 const ctxOrNull = canvas.getContext('2d');
@@ -40,23 +35,8 @@ for (let i = 0; i < 140; i++) {
   });
 }
 
-interface ProjectedPoint {
-  x: number;
-  y: number;
-  scale: number;
-  depth: number;
-}
-
 function project(px: number, py: number, pz: number, cam: Camera): ProjectedPoint | null {
-  // transform world point into camera space using camera axes
-  const dx = px - cam.pos.x, dy = py - cam.pos.y, dz = pz - cam.pos.z;
-  const { forward, right, up } = cam.axes;
-  const cx = dx * right.x + dy * right.y + dz * right.z;
-  const cy = dx * up.x + dy * up.y + dz * up.z;
-  const cz = dx * forward.x + dy * forward.y + dz * forward.z;
-  if (cz <= 1) return null; // behind camera
-  const f = 500 / cz;
-  return { x: canvas.width / 2 + cx * f, y: canvas.height / 2 - cy * f, scale: f, depth: cz };
+  return projectShared(px, py, pz, cam, canvas.width, canvas.height);
 }
 
 function drawLine3D(x1: number, y1: number, z1: number, x2: number, y2: number, z2: number, cam: Camera): void {
@@ -154,23 +134,29 @@ function drawEnemyHull(enemy: EnemyShip, cam: Camera): void {
 }
 
 function drawPip(ship: Ship, scenario: ScenarioRuntime, cam: Camera): void {
-  const enemy = scenario.enemies.find(e => e.health.points > 0);
-  if (!enemy) return;
-  const dist = Math.hypot(enemy.pos.x - ship.pos.x, enemy.pos.y - ship.pos.y, enemy.pos.z - ship.pos.z);
-  if (dist > PIP_RANGE) return;
-  const lead = computeLeadPoint(ship.pos, ship.vel, enemy.pos, enemy.vel, WEAPON.muzzleSpeed);
-  if (!lead) return;
-  const p = project(lead.x, lead.y, lead.z, cam);
-  if (!p) return;
+  const active = findActivePip(ship.pos, ship.vel, cam, scenario.enemies, canvas.width, canvas.height);
+  if (!active) return;
   ctx.strokeStyle = '#ffe696';
   ctx.lineWidth = 1.5;
   const r = 8;
   ctx.beginPath();
-  ctx.moveTo(p.x, p.y - r);
-  ctx.lineTo(p.x + r, p.y);
-  ctx.lineTo(p.x, p.y + r);
-  ctx.lineTo(p.x - r, p.y);
+  ctx.moveTo(active.screenX, active.screenY - r);
+  ctx.lineTo(active.screenX + r, active.screenY);
+  ctx.lineTo(active.screenX, active.screenY + r);
+  ctx.lineTo(active.screenX - r, active.screenY);
   ctx.closePath();
+  ctx.stroke();
+}
+
+// ESP reticle — a smaller ring than the mouse-look virtual-stick circle, always visible (unlike
+// that one, which only shows while mouse-look is captured), since ESP dampening applies to any
+// input device once a PIP enters it.
+function drawEspCircle(): void {
+  const cx = canvas.width / 2, cy = canvas.height / 2;
+  ctx.strokeStyle = 'rgba(255,122,69,0.35)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(cx, cy, EspAssist.getCircleRadius(), 0, Math.PI * 2);
   ctx.stroke();
 }
 
@@ -268,14 +254,18 @@ function updateHUD(ship: Ship, scenario: ScenarioRuntime | null): void {
     document.getElementById('scenario-hud-name')!.textContent = scenario.config.name;
 
     const isGates = scenario.config.winCondition === 'gates';
-    (document.getElementById('scenario-hud-enemy-row') as HTMLElement).style.display = isGates ? 'none' : 'flex';
+    const isSurvive = scenario.config.winCondition === 'survive';
+    (document.getElementById('scenario-hud-enemy-row') as HTMLElement).style.display = (isGates || isSurvive) ? 'none' : 'flex';
     (document.getElementById('scenario-hud-gate-row') as HTMLElement).style.display = isGates ? 'flex' : 'none';
-    (document.getElementById('scenario-hud-timer-row') as HTMLElement).style.display = isGates ? 'flex' : 'none';
+    (document.getElementById('scenario-hud-timer-row') as HTMLElement).style.display = (isGates || isSurvive) ? 'flex' : 'none';
 
     if (isGates) {
       const gateTotal = scenario.config.gatePath?.length ?? 0;
       document.getElementById('scenario-hud-gate')!.textContent =
         `${Math.min(scenario.gateIndex + 1, gateTotal)}/${gateTotal}`;
+      const remaining = Math.max(0, (scenario.config.surviveDurationSec ?? 0) - scenario.elapsedSec);
+      document.getElementById('scenario-hud-timer')!.textContent = `${remaining.toFixed(1)}s`;
+    } else if (isSurvive) {
       const remaining = Math.max(0, (scenario.config.surviveDurationSec ?? 0) - scenario.elapsedSec);
       document.getElementById('scenario-hud-timer')!.textContent = `${remaining.toFixed(1)}s`;
     } else {
@@ -412,6 +402,9 @@ export function render(ship: Ship, scenario: ScenarioRuntime | null = null): voi
   if (MouseLook.isCaptured()) {
     drawMouseReticle();
   }
+
+  // ESP dampening zone — always visible, regardless of input device
+  drawEspCircle();
 
   updateHUD(ship, scenario);
 }

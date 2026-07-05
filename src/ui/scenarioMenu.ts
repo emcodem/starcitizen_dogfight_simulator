@@ -72,17 +72,19 @@ export function initScenarioMenu(h: ScenarioMenuHandlers): void {
 export function showScenarioResult(
   outcome: 'won' | 'lost',
   config: ScenarioConfig,
-  failReason?: 'died' | 'missedGate' | 'timeout'
+  failReason?: 'died' | 'missedGate' | 'timeout',
+  stats?: { shotsFired: number; hitsLanded: number }
 ): void {
   picker.style.display = 'none';
   resultEl.style.display = 'block';
   resultEl.className = outcome;
 
   const isGates = config.winCondition === 'gates';
+  const isSurvive = config.winCondition === 'survive';
   let title: string;
   let detail: string;
   if (outcome === 'won') {
-    title = isGates ? 'MANEUVER COMPLETE' : 'TARGET DESTROYED';
+    title = isGates ? 'MANEUVER COMPLETE' : isSurvive ? 'DRILL COMPLETE' : 'TARGET DESTROYED';
     detail = `${config.name} — training complete.`;
   } else if (failReason === 'missedGate') {
     title = 'GATE MISSED';
@@ -93,6 +95,10 @@ export function showScenarioResult(
   } else {
     title = 'YOU WERE DESTROYED';
     detail = `${config.name} — you took ${config.hitsToKillPlayer} hits.`;
+  }
+  if (stats && stats.shotsFired > 0) {
+    const accuracy = Math.round((stats.hitsLanded / stats.shotsFired) * 100);
+    detail += ` Accuracy: ${accuracy}% (${stats.hitsLanded}/${stats.shotsFired}).`;
   }
   resultEl.innerHTML = `<h2>${title}</h2><p style="color:var(--hud-dim)">${detail}</p>`;
 

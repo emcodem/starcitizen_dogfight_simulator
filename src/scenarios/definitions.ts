@@ -15,6 +15,11 @@ const ROOKIE_GLADIUS = deriveShipType(SHIP_TYPES[0], { angularScale: 0.65, name:
 
 const FIGHTER_SPAWN_QUAT = lookAtQuat({ x: 0, y: 0, z: -1 }); // nose-in toward the player's spawn for a head-on merge
 
+// 'orbiter'/'drifter' spawns get a fresh randomized flight path immediately on scenario start (see
+// scenarios/runtime.ts) — pos/quat here are unused placeholders, same convention as 'chaser' spawns.
+const AIM_TRAINING_PLACEHOLDER_POS = { x: 0, y: 0, z: 0 };
+const AIM_TRAINING_PLACEHOLDER_QUAT = { x: 0, y: 0, z: 0, w: 1 };
+
 export const SCENARIOS: ScenarioConfig[] = [
   {
     id: 'slow-turret-drill',
@@ -117,5 +122,32 @@ export const SCENARIOS: ScenarioConfig[] = [
       startZ: 250, gateCount: 8, spacingZ: 150, turns: 1, rollRadius: 90, gateRadius: 38
     }),
     surviveDurationSec: 35
+  },
+  {
+    id: 'aim-training',
+    name: 'Aim Training',
+    description:
+      'A swarm of harmless drones — some circle you, some streak past on random flight lines. ' +
+      'Hold position (or move freely) and practice yaw/pitch tracking with ESP engaged. No lose condition — ' +
+      'just an accuracy score at the end.',
+    enemySpawns: [
+      ...Array.from({ length: 4 }, () => ({
+        type: SHIP_TYPES[0],
+        pos: AIM_TRAINING_PLACEHOLDER_POS,
+        quat: AIM_TRAINING_PLACEHOLDER_QUAT,
+        behavior: 'orbiter' as const
+      })),
+      ...Array.from({ length: 4 }, () => ({
+        type: SHIP_TYPES[0],
+        pos: AIM_TRAINING_PLACEHOLDER_POS,
+        quat: AIM_TRAINING_PLACEHOLDER_QUAT,
+        behavior: 'drifter' as const
+      }))
+    ],
+    hitsToKillEnemy: 3,
+    hitsToKillPlayer: 999, // unreachable — drones never fire, this drill has no lose condition
+    includeStation: false,
+    winCondition: 'survive',
+    surviveDurationSec: 90
   }
 ];

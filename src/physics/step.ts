@@ -1,5 +1,7 @@
 import type { Ship } from '../types';
+import type { ScenarioRuntime } from '../scenarios/types';
 import { clamp } from '../math/vec';
+import { computeAxes } from '../math/quaternion';
 import * as ControlsModule from '../input/controlsModule';
 import * as GamepadModule from '../input/gamepadModule';
 import * as JoystickAxes from '../input/joystickAxes';
@@ -10,11 +12,13 @@ import { updateProjectiles } from '../world/weapons';
 import { resetShip } from '../ship/shipState';
 import { toggleDecoupled } from '../ship/decoupledPersist';
 import { integrateFlight, resolveBoost } from './flightModel';
+import * as EspAssist from '../combat/espAssist';
+import { findActivePip } from '../combat/pipTargeting';
 
 const HIT_FLASH_FADE_SECONDS = 0.4;
 
 // ---------- Physics step ----------
-export function step(ship: Ship, dt: number): void {
+export function step(ship: Ship, dt: number, activeRuntime: ScenarioRuntime | null = null): void {
   // hit-flash cue fades out on its own — combat/hitDetection.ts sets it back to 1 on a fresh hit
   ship.hitFlash = Math.max(0, ship.hitFlash - dt / HIT_FLASH_FADE_SECONDS);
 
@@ -72,6 +76,18 @@ export function step(ship: Ship, dt: number): void {
   pitchInput += mouseInput.pitch;
   yawInput += mouseInput.yaw;
 
+  // --- ESP: dampen the already-combined pitch/yaw once the crosshair nears the active PIP ---
+  if (activeRuntime) {
+    const cam = { pos: ship.pos, axes: computeAxes(ship.quat) };
+    const pip = findActivePip(ship.pos, ship.vel, cam, activeRuntime.enemies, window.innerWidth, window.innerHeight);
+    if (pip) {
+      const screenDist = Math.hypot(pip.screenX - window.innerWidth / 2, pip.screenY - window.innerHeight / 2);
+      const factor = EspAssist.dampingFactorForDistance(screenDist);
+      pitchInput *= factor;
+      yawInput *= factor;
+    }
+  }
+
   // --- Linear thrust — strafe left/right/up/down ---
   const strafeInput = { x: 0, y: 0 }; // x = right/left, y = up/down
   if (ControlsModule.isActive('strafeLeft')) strafeInput.x -= 1;
@@ -108,5 +124,6 @@ export function step(ship: Ship, dt: number): void {
     }
   }
 
-  updateProjectiles(dt, ship);
+  const fired = updateProjectiles(dt, ship);
+  if (fired && activeRuntime) activeRuntime.stats.shotsFired++;
 }

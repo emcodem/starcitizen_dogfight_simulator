@@ -64,9 +64,28 @@ export interface Health {
 }
 
 export type EnemyBehavior =
-  | 'turret'  // stationary, just rotates in place to track and fire — see scenarios/runtime.ts
-  | 'fighter' // full Newtonian flight, driven by combat/enemyAI.ts through physics/flightModel.ts
-  | 'chaser'; // holds station behind the player and fires — see combat/enemyAI.ts chaserThink
+  | 'turret'   // stationary, just rotates in place to track and fire — see scenarios/runtime.ts
+  | 'fighter'  // full Newtonian flight, driven by combat/enemyAI.ts through physics/flightModel.ts
+  | 'chaser'   // holds station behind the player and fires — see combat/enemyAI.ts chaserThink
+  | 'orbiter'  // circles the player at a fixed radius, harmless — see combat/enemyAI.ts orbiterThink
+  | 'drifter'; // straight-line pass-by, harmless, recycles once out of range — see combat/enemyAI.ts driftThink
+
+// Per-enemy state for the 'orbiter' behavior — a fixed circular path around the player's current
+// position. `planeRight`/`planeUp` are a random orthonormal pair fixed at spawn, so the ring holds
+// a stable orientation in world space rather than tracking the player's own facing.
+export interface OrbitState {
+  radius: number;
+  angularSpeed: number; // rad/s
+  phase: number;         // current angle, radians — advanced each tick
+  planeRight: Vec3;
+  planeUp: Vec3;
+  respawnTimer: number;  // elapsed seconds since death, 0 while alive — see scenarios/runtime.ts
+}
+
+// Per-enemy state for the 'drifter' behavior — ballistic straight-line flight, no steering.
+export interface DriftState {
+  respawnTimer: number; // elapsed seconds since death, 0 while alive — see scenarios/runtime.ts
+}
 
 // Difficulty knobs for the 'fighter' behavior (see combat/enemyAI.ts for how each is used, and its
 // FIGHTER_TUNING_ACE / FIGHTER_TUNING_ROOKIE presets). Defined here rather than in enemyAI.ts so
@@ -119,6 +138,8 @@ export interface EnemyShip {
   turnRateRadPerSec?: number; // 'turret' only — capped aim-turn rate used by rotateTowards
   ai?: FighterAIMemory;       // 'fighter' only
   fireCooldown: number;
+  orbit?: OrbitState; // 'orbiter' only
+  drift?: DriftState; // 'drifter' only
 }
 
 export type ActionName =
