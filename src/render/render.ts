@@ -170,6 +170,35 @@ function drawEnemyHull(enemy: EnemyShip, cam: Camera): void {
   }
 }
 
+// Distance + closing-speed readout under every live enemy, not just the one with an active PIP —
+// so the player can read range/closure on the whole field before committing to an attack run,
+// same as a real HUD's target-info readout.
+function drawEnemyInfo(enemy: EnemyShip, ship: Ship, cam: Camera): void {
+  if (enemy.health.points <= 0) return;
+  const p = project(enemy.pos.x, enemy.pos.y, enemy.pos.z, cam);
+  if (!p) return;
+
+  const relPos: Vec3 = { x: enemy.pos.x - ship.pos.x, y: enemy.pos.y - ship.pos.y, z: enemy.pos.z - ship.pos.z };
+  const distance = Math.hypot(relPos.x, relPos.y, relPos.z);
+  if (distance < 1e-6) return;
+  const relVel: Vec3 = { x: enemy.vel.x - ship.vel.x, y: enemy.vel.y - ship.vel.y, z: enemy.vel.z - ship.vel.z };
+  // d(distance)/dt = dot(relPos, relVel) / distance — negative means the range is shrinking
+  // (closing), positive means it's growing (opening).
+  const rangeRate = (relPos.x * relVel.x + relPos.y * relVel.y + relPos.z * relVel.z) / distance;
+
+  // offset a fixed world-space distance below the hull, converted to screen pixels via this
+  // point's own scale, so the label sits just under the ship at any range instead of drifting
+  // away from it as it gets closer/farther
+  const offsetY = clamp(enemy.type.hullRadius * 1.8 * p.scale, 14, 60);
+
+  ctx.textAlign = 'center';
+  ctx.font = '10px Courier New';
+  ctx.fillStyle = 'rgba(200, 225, 215, 0.85)';
+  ctx.fillText(`${distance.toFixed(0)}m`, p.x, p.y + offsetY);
+  ctx.fillStyle = rangeRate < 0 ? 'rgba(125, 255, 160, 0.85)' : 'rgba(255, 150, 110, 0.85)';
+  ctx.fillText(`${rangeRate >= 0 ? '+' : ''}${rangeRate.toFixed(0)} m/s`, p.x, p.y + offsetY + 11);
+}
+
 // Recent-position history for Aim Training drones, so a curved orbit or a straight drift pass reads
 // as a contrail rather than just an instantaneous heading. Keyed by object identity — a respawned
 // drone reuses the same EnemyShip object (see scenarios/runtime.ts), so death clears the trail
@@ -484,6 +513,7 @@ export function render(ship: Ship, scenario: ScenarioRuntime | null = null): voi
     for (const enemy of scenario.enemies) {
       updateAndDrawDroneTrail(enemy, cam);
       drawEnemyHull(enemy, cam);
+      drawEnemyInfo(enemy, ship, cam);
     }
     drawEnemyExplosions(scenario, cam);
   }
