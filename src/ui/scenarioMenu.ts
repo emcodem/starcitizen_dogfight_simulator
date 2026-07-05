@@ -1,5 +1,8 @@
-import { SCENARIOS, buildAimTrainingScenario, AIM_TRAINING_DEFAULTS } from '../scenarios/definitions';
-import type { AimTrainingOptions } from '../scenarios/definitions';
+import {
+  SCENARIOS, buildAimTrainingScenario, AIM_TRAINING_DEFAULTS,
+  buildMergeDrillScenario, MERGE_DRILL_DEFAULTS
+} from '../scenarios/definitions';
+import type { AimTrainingOptions, MergeDrillOptions } from '../scenarios/definitions';
 import type { ScenarioConfig } from '../scenarios/types';
 
 export interface ScenarioMenuHandlers {
@@ -40,6 +43,29 @@ function saveAimTrainingOptions(): void {
 }
 
 const aimTrainingOptions: AimTrainingOptions = loadAimTrainingOptions();
+
+const MERGE_DRILL_STORAGE_KEY = 'vector_merge_drill_options';
+
+function loadMergeDrillOptions(): MergeDrillOptions {
+  try {
+    const raw = localStorage.getItem(MERGE_DRILL_STORAGE_KEY);
+    if (!raw) return { ...MERGE_DRILL_DEFAULTS };
+    const parsed = JSON.parse(raw);
+    return {
+      rangeBubbleRadius: typeof parsed.rangeBubbleRadius === 'number'
+        ? parsed.rangeBubbleRadius : MERGE_DRILL_DEFAULTS.rangeBubbleRadius
+    };
+  } catch {
+    return { ...MERGE_DRILL_DEFAULTS }; // localStorage unavailable (e.g. private browsing) or corrupt data
+  }
+}
+
+function saveMergeDrillOptions(): void {
+  try { localStorage.setItem(MERGE_DRILL_STORAGE_KEY, JSON.stringify(mergeDrillOptions)); }
+  catch { /* localStorage can be unavailable (e.g. private browsing) — non-fatal */ }
+}
+
+const mergeDrillOptions: MergeDrillOptions = loadMergeDrillOptions();
 
 function sliderRow(
   label: string, initial: number, min: number, max: number, step: number,
@@ -101,6 +127,25 @@ function buildAimTrainingControls(): HTMLElement {
   return wrap;
 }
 
+// descEl's text is kept in sync with the slider so the card's stated bubble size never drifts
+// from the value it'll actually be started with (the description text embeds the meter figure).
+function buildMergeDrillControls(descEl: HTMLElement): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'scenario-slider-block';
+
+  wrap.appendChild(sliderRow(
+    'Bubble Size', mergeDrillOptions.rangeBubbleRadius, 10, 1000, 10,
+    v => `${v}m`,
+    v => {
+      mergeDrillOptions.rangeBubbleRadius = v;
+      saveMergeDrillOptions();
+      descEl.textContent = buildMergeDrillScenario(mergeDrillOptions).description;
+    }
+  ));
+
+  return wrap;
+}
+
 function renderList(): void {
   list.innerHTML = '';
 
@@ -118,15 +163,24 @@ function renderList(): void {
 
   for (const config of SCENARIOS) {
     const isAimTraining = config.id === 'aim-training';
+    const isMergeDrill = config.id === 'merge-drill';
+    // merge-drill's description embeds the configured bubble radius, so it's rebuilt from the
+    // player's saved options rather than using the default-built SCENARIOS entry as-is.
+    const displayConfig = isMergeDrill ? buildMergeDrillScenario(mergeDrillOptions) : config;
     const card = document.createElement('div');
     card.className = 'scenario-card';
-    card.innerHTML = `<h3>${config.name}</h3><p>${config.description}</p>`;
+    card.innerHTML = `<h3>${displayConfig.name}</h3><p>${displayConfig.description}</p>`;
     if (isAimTraining) card.appendChild(buildAimTrainingControls());
+    if (isMergeDrill) card.appendChild(buildMergeDrillControls(card.querySelector('p') as HTMLElement));
     const btn = document.createElement('button');
     btn.textContent = 'START';
     btn.addEventListener('click', () => {
       overlay.style.display = 'none';
-      handlers.startScenario(isAimTraining ? buildAimTrainingScenario(aimTrainingOptions) : config);
+      handlers.startScenario(
+        isAimTraining ? buildAimTrainingScenario(aimTrainingOptions)
+          : isMergeDrill ? buildMergeDrillScenario(mergeDrillOptions)
+          : config
+      );
     });
     card.appendChild(btn);
     list.appendChild(card);
@@ -163,7 +217,8 @@ export function showScenarioResult(
   outcome: 'won' | 'lost',
   config: ScenarioConfig,
   failReason?: 'died' | 'missedGate' | 'timeout',
-  stats?: { shotsFired: number; hitsLanded: number; kills: number }
+  stats?: { shotsFired: number; hitsLanded: number; kills: number },
+  bubbleTicks?: number // Merge Drill's "100ms ticks spent in range" count — see scenarios/runtime.ts
 ): void {
   picker.style.display = 'none';
   resultEl.style.display = 'block';
@@ -190,6 +245,9 @@ export function showScenarioResult(
     const accuracy = Math.round((stats.hitsLanded / stats.shotsFired) * 100);
     detail += ` Accuracy: ${accuracy}% (${stats.hitsLanded}/${stats.shotsFired}).`;
     if (isSurvive) detail += ` Kills: ${stats.kills}.`;
+  }
+  if (config.rangeBubbleRadius !== undefined && bubbleTicks !== undefined) {
+    detail += ` In range: ${bubbleTicks} (${(bubbleTicks / 10).toFixed(1)}s).`;
   }
   resultEl.innerHTML = `<h2>${title}</h2><p style="color:var(--hud-dim)">${detail}</p>`;
 

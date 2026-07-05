@@ -74,6 +74,21 @@ body.touch #scenario-menu-toggle { top: auto; bottom: 180px; right: 110px; }
 #fullscreen-toggle.on { border-color: var(--hud); color: var(--hud); }
 body.touch #fullscreen-toggle { top: auto; bottom: 180px; right: 230px; }
 
+#restart-toggle {
+  position: fixed; top: 16px; right: 16px;
+  z-index: 20;
+  background: rgba(5,10,12,0.7);
+  border: 1px solid var(--hud-dim);
+  color: var(--hud);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+#restart-toggle:hover { border-color: var(--accent); color: var(--accent); }
+body.touch #restart-toggle { top: auto; bottom: 180px; right: 344px; }
+
 .menu-link-btn {
   display: inline-block;
   background: rgba(255,255,255,0.06); border: 1px solid var(--hud-dim); color: var(--hud);

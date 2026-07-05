@@ -62,8 +62,43 @@ export function buildAimTrainingScenario(opts: AimTrainingOptions = AIM_TRAINING
   };
 }
 
+// User-configurable knob exposed as a slider on the Merge Drill card (see ui/scenarioMenu.ts).
+export interface MergeDrillOptions {
+  rangeBubbleRadius: number; // meters — see ScenarioConfig.rangeBubbleRadius
+}
+
+export const MERGE_DRILL_DEFAULTS: MergeDrillOptions = { rangeBubbleRadius: 600 };
+
+export function buildMergeDrillScenario(opts: MergeDrillOptions = MERGE_DRILL_DEFAULTS): ScenarioConfig {
+  return {
+    id: 'merge-drill',
+    name: 'Merge Drill',
+    description:
+      'You and a bandit start 2km apart, both already at full speed on a head-on collision course. ' +
+      'The bandit just flies straight through the merge and never fires back — your job is to turn, run it down, ' +
+      `and settle inside its ${opts.rangeBubbleRadius}m bubble (marked around its hull) without overshooting past it.`,
+    enemySpawns: [
+      {
+        type: SHIP_TYPES[0],
+        pos: { x: 0, y: 0, z: 2000 },
+        quat: FIGHTER_SPAWN_QUAT,
+        behavior: 'cruiser',
+        initialVel: { x: 0, y: 0, z: -SHIP_TYPES[0].scmSpeed }
+      }
+    ],
+    hitsToKillEnemy: 999, // unreachable — shooting it down would end the drill early, not the point of it
+    hitsToKillPlayer: 999, // unreachable — the bandit never fires
+    includeStation: false,
+    winCondition: 'survive',
+    surviveDurationSec: 60,
+    playerInitialVel: { x: 0, y: 0, z: SHIP_TYPES[0].scmSpeed },
+    rangeBubbleRadius: opts.rangeBubbleRadius
+  };
+}
+
 export const SCENARIOS: ScenarioConfig[] = [
   buildAimTrainingScenario(),
+  buildMergeDrillScenario(),
   {
     id: 'slow-turret-drill',
     name: 'Slow Turret Drill',

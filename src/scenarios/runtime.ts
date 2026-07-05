@@ -18,11 +18,14 @@ export const ENEMY_EXPLOSION_DURATION = 0.6;
 
 export function startScenario(config: ScenarioConfig, player: Ship): ScenarioRuntime {
   player.health = createHealth(config.hitsToKillPlayer);
+  player.vel = config.playerInitialVel
+    ? { x: config.playerInitialVel.x, y: config.playerInitialVel.y, z: config.playerInitialVel.z }
+    : { x: 0, y: 0, z: 0 };
   const enemies: EnemyShip[] = config.enemySpawns.map(spawn => ({
     type: spawn.type,
     pos: { x: spawn.pos.x, y: spawn.pos.y, z: spawn.pos.z },
     quat: { x: spawn.quat.x, y: spawn.quat.y, z: spawn.quat.z, w: spawn.quat.w },
-    vel: { x: 0, y: 0, z: 0 },
+    vel: spawn.initialVel ? { x: spawn.initialVel.x, y: spawn.initialVel.y, z: spawn.initialVel.z } : { x: 0, y: 0, z: 0 },
     angVel: { pitch: 0, yaw: 0, roll: 0 },
     boostMeter: spawn.type.boostCapacity,
     boosting: false,
@@ -52,8 +55,15 @@ export function startScenario(config: ScenarioConfig, player: Ship): ScenarioRun
 
   return {
     config, enemies, outcome: 'active', elapsedSec: 0, gateIndex: 0,
-    stats: { shotsFired: 0, hitsLanded: 0, kills: 0 }, explosions: []
+    stats: { shotsFired: 0, hitsLanded: 0, kills: 0 }, explosions: [], bubbleTimeSec: 0
   };
+}
+
+// Number of 100ms ticks the player has spent within rangeBubbleRadius, for display — see
+// ScenarioRuntime.bubbleTimeSec's doc comment for why this is derived rather than an incremented
+// counter (a plain time accumulator sidesteps any drift between real elapsed time and tick count).
+export function bubbleTicks(runtime: ScenarioRuntime): number {
+  return Math.floor(runtime.bubbleTimeSec / 0.1);
 }
 
 export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: number): void {
@@ -65,6 +75,11 @@ export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: numbe
     // else (turret/chaser/fighter) just stays dead once destroyed, per the 'destroy' scenarios'
     // design. Skipping dead orbiters/drifters here too would make that respawn code unreachable.
     if (enemy.health.points <= 0 && enemy.behavior !== 'orbiter' && enemy.behavior !== 'drifter') continue;
+
+    if (enemy.behavior === 'cruiser') {
+      FighterAI.cruiseThink(enemy, dt);
+      continue;
+    }
 
     if (enemy.behavior === 'chaser') {
       const decision = FighterAI.chaserThink(enemy, player);
@@ -197,6 +212,15 @@ export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: numbe
     runtime.stats.kills++;
     runtime.explosions.push({ pos: { x: enemy.pos.x, y: enemy.pos.y, z: enemy.pos.z }, timer: ENEMY_EXPLOSION_DURATION });
   });
+
+  if (runtime.config.rangeBubbleRadius !== undefined) {
+    const bubbleRadius = runtime.config.rangeBubbleRadius;
+    const insideBubble = runtime.enemies.some(enemy =>
+      enemy.health.points > 0 &&
+      Math.hypot(enemy.pos.x - player.pos.x, enemy.pos.y - player.pos.y, enemy.pos.z - player.pos.z) <= bubbleRadius
+    );
+    if (insideBubble) runtime.bubbleTimeSec += dt;
+  }
 
   for (let i = runtime.explosions.length - 1; i >= 0; i--) {
     runtime.explosions[i].timer -= dt;

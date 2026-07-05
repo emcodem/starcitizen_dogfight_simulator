@@ -7,7 +7,7 @@ import { WEAPON, projectiles } from '../world/weapons';
 import * as MouseLook from '../input/mouseLook';
 import * as EspAssist from '../combat/espAssist';
 import { findActivePip } from '../combat/pipTargeting';
-import { ENEMY_EXPLOSION_DURATION } from '../scenarios/runtime';
+import { ENEMY_EXPLOSION_DURATION, bubbleTicks } from '../scenarios/runtime';
 import { project as projectShared, type Camera, type ProjectedPoint } from './projection';
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
@@ -266,6 +266,63 @@ function drawEnemyExplosions(scenario: ScenarioRuntime, cam: Camera): void {
   }
 }
 
+// Off-screen edge indicator — an arrow at the viewport edge pointing toward any live enemy that
+// isn't currently projected on screen (behind the camera, or in front but outside the canvas
+// bounds), so the player can find/track enemies without a separate radar or map. General-purpose,
+// not tied to any one scenario.
+const EDGE_INDICATOR_MARGIN = 28;
+
+function drawOffscreenIndicators(scenario: ScenarioRuntime, cam: Camera): void {
+  const w = canvas.width, h = canvas.height;
+  const cx = w / 2, cy = h / 2;
+  const halfW = cx - EDGE_INDICATOR_MARGIN, halfH = cy - EDGE_INDICATOR_MARGIN;
+  const { forward, right, up } = cam.axes;
+
+  for (const enemy of scenario.enemies) {
+    if (enemy.health.points <= 0) continue;
+    const p = project(enemy.pos.x, enemy.pos.y, enemy.pos.z, cam);
+    const onScreen = p !== null && p.x >= 0 && p.x <= w && p.y >= 0 && p.y <= h;
+    if (onScreen) continue;
+
+    const dx = enemy.pos.x - cam.pos.x, dy = enemy.pos.y - cam.pos.y, dz = enemy.pos.z - cam.pos.z;
+    const camX = dx * right.x + dy * right.y + dz * right.z;
+    const camY = dx * up.x + dy * up.y + dz * up.z;
+    const camZ = dx * forward.x + dy * forward.y + dz * forward.z;
+
+    // camX/camY line up with screen x/-y the same way project() does; behind the camera that
+    // mapping flips sign, so mirror both components to keep the arrow pointing the way the
+    // player would actually need to turn rather than the mirror-image direction.
+    let dirX = camX, dirY = -camY;
+    if (camZ < 0) { dirX = -dirX; dirY = -dirY; }
+    if (Math.abs(dirX) < 1e-6 && Math.abs(dirY) < 1e-6) dirY = 1; // dead ahead-behind: pick a side
+
+    const angle = Math.atan2(dirY, dirX);
+    const cosA = Math.cos(angle), sinA = Math.sin(angle);
+    const tx = Math.abs(cosA) > 1e-6 ? halfW / Math.abs(cosA) : Infinity;
+    const ty = Math.abs(sinA) > 1e-6 ? halfH / Math.abs(sinA) : Infinity;
+    const t = Math.min(tx, ty);
+    const ex = cx + cosA * t, ey = cy + sinA * t;
+
+    ctx.save();
+    ctx.translate(ex, ey);
+    ctx.rotate(angle);
+    ctx.fillStyle = '#ff7a45';
+    ctx.beginPath();
+    ctx.moveTo(10, 0);
+    ctx.lineTo(-7, 6);
+    ctx.lineTo(-7, -6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    const distance = Math.hypot(dx, dy, dz);
+    ctx.textAlign = 'center';
+    ctx.font = '10px Courier New';
+    ctx.fillStyle = 'rgba(255, 170, 110, 0.85)';
+    ctx.fillText(`${distance.toFixed(0)}m`, ex, ey + (sinA >= 0 ? 18 : -14));
+  }
+}
+
 // ESP reticle — a smaller ring than the mouse-look virtual-stick circle, always visible (unlike
 // that one, which only shows while mouse-look is captured), since ESP dampening applies to any
 // input device once a PIP enters it.
@@ -276,6 +333,39 @@ function drawEspCircle(): void {
   ctx.beginPath();
   ctx.arc(cx, cy, EspAssist.getCircleRadius(), 0, Math.PI * 2);
   ctx.stroke();
+}
+
+// Merge/closure drills' "hold station here" envelope — see ScenarioConfig.rangeBubbleRadius.
+// Drawn as a single shaded, translucent disc at the sphere's projected center/radius rather than
+// wireframe great-circles — since this projector has no real 3D surface shading, a filled circle
+// with a soft off-center highlight is what reads as a solid ball rather than flat rings at a glance.
+function drawRangeBubble(scenario: ScenarioRuntime, cam: Camera): void {
+  const radius = scenario.config.rangeBubbleRadius;
+  if (!radius) return;
+  for (const enemy of scenario.enemies) {
+    if (enemy.health.points <= 0) continue;
+    const p = project(enemy.pos.x, enemy.pos.y, enemy.pos.z, cam);
+    if (!p) continue;
+    const r = radius * p.scale;
+    if (r < 1) continue;
+
+    const gradient = ctx.createRadialGradient(
+      p.x - r * 0.35, p.y - r * 0.35, r * 0.05,
+      p.x, p.y, r
+    );
+    gradient.addColorStop(0, 'rgba(220,255,230,0.95)');
+    gradient.addColorStop(0.55, 'rgba(110,240,165,0.88)');
+    gradient.addColorStop(0.85, 'rgba(60,190,125,0.82)');
+    gradient.addColorStop(1, 'rgba(40,160,105,0.75)');
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(150,255,195,0.95)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
 }
 
 // "Fly through this ring" gate-path overlay for the barrel-roll evasion drills. Draws a projected
@@ -379,6 +469,9 @@ function updateHUD(ship: Ship, scenario: ScenarioRuntime | null): void {
     (document.getElementById('scenario-hud-accuracy-row') as HTMLElement).style.display = isSurvive ? 'flex' : 'none';
     (document.getElementById('scenario-hud-gate-row') as HTMLElement).style.display = isGates ? 'flex' : 'none';
     (document.getElementById('scenario-hud-timer-row') as HTMLElement).style.display = (isGates || isSurvive) ? 'flex' : 'none';
+    const hasBubble = scenario.config.rangeBubbleRadius !== undefined;
+    (document.getElementById('scenario-hud-bubble-row') as HTMLElement).style.display = hasBubble ? 'flex' : 'none';
+    if (hasBubble) document.getElementById('scenario-hud-bubble')!.textContent = `${bubbleTicks(scenario)}`;
 
     if (isGates) {
       const gateTotal = scenario.config.gatePath?.length ?? 0;
@@ -510,12 +603,14 @@ export function render(ship: Ship, scenario: ScenarioRuntime | null = null): voi
 
   // scenario opponent(s), if any
   if (scenario) {
+    drawRangeBubble(scenario, cam);
     for (const enemy of scenario.enemies) {
       updateAndDrawDroneTrail(enemy, cam);
       drawEnemyHull(enemy, cam);
       drawEnemyInfo(enemy, ship, cam);
     }
     drawEnemyExplosions(scenario, cam);
+    drawOffscreenIndicators(scenario, cam);
   }
 
   // weapon tracers

@@ -7,6 +7,7 @@ export interface EnemySpawnConfig {
   behavior: EnemyBehavior;
   turnRateRadPerSec?: number; // required in practice for 'turret' spawns, unused for 'fighter'
   tuning?: FighterTuning;     // 'fighter' only — a FIGHTER_TUNING_* preset (see combat/enemyAI.ts)
+  initialVel?: Vec3;          // 'cruiser' only — its fixed flight velocity for the whole scenario; omitted means {0,0,0}
 }
 
 // A single "fly through this ring" waypoint in a scripted gate path (see scenarios/gatePath.ts).
@@ -41,6 +42,13 @@ export interface ScenarioConfig {
   // (and, for drifters, how close their flight line passes) via enemyAI.ts's spawnOrbitState/
   // spawnDriftState. Unused outside the Aim Training drill. Defaults to 0.5 when omitted.
   droneAggressiveness?: number;
+  // Player's world-space velocity at scenario start — lets a drill spawn the player already moving
+  // (e.g. closing head-on with a 'cruiser' target), instead of always starting from a dead stop.
+  // Omitted means {0,0,0}, the prior default for every other scenario.
+  playerInitialVel?: Vec3;
+  // Meters — when set, render.ts draws a wireframe "range bubble" of this radius around every live
+  // enemy, e.g. to mark a merge drill's hold-station envelope. Omitted draws nothing.
+  rangeBubbleRadius?: number;
 }
 
 // A brief visual burst at an enemy's position when it's destroyed — see ENEMY_EXPLOSION_DURATION
@@ -59,4 +67,8 @@ export interface ScenarioRuntime {
   gateIndex: number; // index of the next uncleared gate in config.gatePath — 'gates' scenarios only
   stats: { shotsFired: number; hitsLanded: number; kills: number }; // accuracy/kill tracking, shown live (Aim Training HUD) and on the results screen
   explosions: EnemyExplosion[]; // active death-effect bursts, pruned as their timers expire
+  // Total seconds the player has spent within any live enemy's rangeBubbleRadius (Merge Drill) —
+  // accumulated every tick in scenarios/runtime.ts, unused/always 0 for configs without a bubble.
+  // Displayed as a "ticks" count (see bubbleTicks in runtime.ts) that rises by 1 every 100ms inside.
+  bubbleTimeSec: number;
 }

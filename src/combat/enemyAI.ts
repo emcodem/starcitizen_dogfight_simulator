@@ -317,6 +317,18 @@ export function chaserThink(enemy: EnemyShip, player: Ship): FighterDecision {
 }
 
 // ===========================================================================
+// CruiserAI — the 'cruiser' EnemyShip behavior, used by merge/closure drills (see
+// scenarios/definitions.ts). No steering, no firing, no death handling beyond the generic
+// scenarios/runtime.ts skip-if-dead check: it just holds the velocity it spawned with and flies a
+// dead-straight line forever, so a drill built around chasing it down isn't fighting an AI as well.
+// ===========================================================================
+export function cruiseThink(enemy: EnemyShip, dt: number): void {
+  enemy.pos.x += enemy.vel.x * dt;
+  enemy.pos.y += enemy.vel.y * dt;
+  enemy.pos.z += enemy.vel.z * dt;
+}
+
+// ===========================================================================
 // OrbiterAI / DrifterAI — harmless practice targets for the Aim Training drill (see
 // scenarios/definitions.ts). Neither ever fires; scenarios/runtime.ts's dispatch for these two
 // behaviors has no firing logic at all. Both respawn a short while after being shot down so the

@@ -73,7 +73,8 @@ export type EnemyBehavior =
   | 'fighter'  // full Newtonian flight, driven by combat/enemyAI.ts through physics/flightModel.ts
   | 'chaser'   // holds station behind the player and fires — see combat/enemyAI.ts chaserThink
   | 'orbiter'  // circles a fixed point near the player at a fixed radius, harmless — see combat/enemyAI.ts orbiterThink
-  | 'drifter'; // straight-line pass-by, harmless, recycles once out of range — see combat/enemyAI.ts driftThink
+  | 'drifter'  // straight-line pass-by, harmless, recycles once out of range — see combat/enemyAI.ts driftThink
+  | 'cruiser'; // flies dead straight at its spawn velocity forever, no steering, harmless — see combat/enemyAI.ts cruiseThink
 
 // Per-enemy state for the 'orbiter' behavior — a fixed circular path around a world-space point
 // fixed at spawn/respawn time (near the player, but not re-centered every tick — see

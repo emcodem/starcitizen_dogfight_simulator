@@ -12,7 +12,7 @@ import { initControlsPanel } from './ui/controlsPanel';
 import { initModeToggle } from './ui/modeToggle';
 import { initEspSettingsUI } from './ui/espSettingsUI';
 import { initScenarioMenu, showScenarioResult } from './ui/scenarioMenu';
-import { startScenario, updateScenario } from './scenarios/runtime';
+import { startScenario, updateScenario, bubbleTicks } from './scenarios/runtime';
 import type { ScenarioConfig, ScenarioRuntime } from './scenarios/types';
 import { setStationActive } from './world/station';
 
@@ -40,8 +40,10 @@ initEspSettingsUI();
 type Mode = 'menu' | 'playing';
 let mode: Mode = 'menu';
 let activeRuntime: ScenarioRuntime | null = null;
+let currentConfig: ScenarioConfig | null = null; // whatever startRun was last called with — see restartRun
 
 function startRun(config: ScenarioConfig | null): void {
+  currentConfig = config;
   resetShip(ship);
   setStationActive(config ? config.includeStation : true);
   activeRuntime = config ? startScenario(config, ship) : null;
@@ -53,6 +55,18 @@ initScenarioMenu({
   startFreeFlight: () => startRun(null),
   startScenario: config => startRun(config),
   onOpenMenu: () => { mode = 'menu'; }
+});
+
+// ---------- F1 / on-screen button — instant restart of whatever's currently running ----------
+function restartRun(): void {
+  if (mode !== 'playing') return; // nothing live to restart (menu/results screen is open)
+  startRun(currentConfig);
+}
+(document.getElementById('restart-toggle') as HTMLElement).addEventListener('click', restartRun);
+window.addEventListener('keydown', e => {
+  if (e.code !== 'F1') return;
+  e.preventDefault(); // browsers otherwise open help on F1
+  restartRun();
 });
 
 // ---------- Main loop ----------
@@ -67,7 +81,10 @@ function loop(now: number): void {
         updateScenario(activeRuntime, ship, dt);
         if (activeRuntime.outcome !== 'active') {
           mode = 'menu';
-          showScenarioResult(activeRuntime.outcome, activeRuntime.config, activeRuntime.failReason, activeRuntime.stats);
+          showScenarioResult(
+            activeRuntime.outcome, activeRuntime.config, activeRuntime.failReason,
+            activeRuntime.stats, bubbleTicks(activeRuntime)
+          );
         }
       }
       render(ship, activeRuntime);
