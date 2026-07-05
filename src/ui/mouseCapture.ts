@@ -30,6 +30,10 @@ export function initMouseCapture(): void {
   sensSlider.value = String(MouseLook.getSensitivity());
   sensSlider.addEventListener('input', e => MouseLook.setSensitivity(parseFloat((e.target as HTMLInputElement).value)));
 
+  const deadzoneSlider = document.getElementById('ctrl-mouse-deadzone') as HTMLInputElement;
+  deadzoneSlider.value = String(MouseLook.getDeadzone());
+  deadzoneSlider.addEventListener('input', e => MouseLook.setDeadzone(parseFloat((e.target as HTMLInputElement).value)));
+
   const invertCheckbox = document.getElementById('ctrl-mouse-invert') as HTMLInputElement;
   invertCheckbox.checked = MouseLook.getInvertY();
   invertCheckbox.addEventListener('change', e => MouseLook.setInvertY((e.target as HTMLInputElement).checked));

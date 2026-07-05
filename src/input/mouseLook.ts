@@ -18,6 +18,7 @@ let offsetX = 0, offsetY = 0; // persistent virtual-stick deflection, in pixels
 const MAX_OFFSET = 220; // pixels of mouse travel for full deflection
 let sensitivity = 1.5; // multiplier applied on top of the offset ratio
 let invertY = true;
+let deadzone = 0.05; // fraction of MAX_OFFSET ignored near center, to absorb sensor/hand jitter
 const listeners: Array<(captured: boolean) => void> = [];
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
@@ -62,8 +63,12 @@ export function recenter(): void {
 export function consume(): MouseLookInput {
   // reads the CURRENT stick deflection — does not reset it, since the
   // deflection should keep driving rotation until manually recentered
-  const yaw = Math.max(-1, Math.min(1, (offsetX / MAX_OFFSET) * sensitivity));
-  let pitch = Math.max(-1, Math.min(1, (offsetY / MAX_OFFSET) * sensitivity));
+  let xRatio = offsetX / MAX_OFFSET;
+  let yRatio = offsetY / MAX_OFFSET;
+  if (Math.abs(xRatio) < deadzone) xRatio = 0;
+  if (Math.abs(yRatio) < deadzone) yRatio = 0;
+  const yaw = Math.max(-1, Math.min(1, xRatio * sensitivity));
+  let pitch = Math.max(-1, Math.min(1, yRatio * sensitivity));
   if (invertY) pitch = -pitch;
   return { pitch, yaw };
 }
@@ -88,4 +93,10 @@ export function getInvertY(): boolean {
 }
 export function setInvertY(v: boolean): void {
   invertY = v;
+}
+export function getDeadzone(): number {
+  return deadzone;
+}
+export function setDeadzone(v: number): void {
+  deadzone = v;
 }
