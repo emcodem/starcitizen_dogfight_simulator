@@ -22,6 +22,33 @@ const AIM_TRAINING_PLACEHOLDER_QUAT = { x: 0, y: 0, z: 0, w: 1 };
 
 export const SCENARIOS: ScenarioConfig[] = [
   {
+    id: 'aim-training',
+    name: 'Aim Training',
+    description:
+      'A swarm of harmless drones — some circle you, some streak past on random flight lines. ' +
+      'Hold position (or move freely) and practice yaw/pitch tracking with ESP engaged. No lose condition — ' +
+      'just an accuracy score at the end.',
+    enemySpawns: [
+      ...Array.from({ length: 4 }, () => ({
+        type: SHIP_TYPES[0],
+        pos: AIM_TRAINING_PLACEHOLDER_POS,
+        quat: AIM_TRAINING_PLACEHOLDER_QUAT,
+        behavior: 'orbiter' as const
+      })),
+      ...Array.from({ length: 4 }, () => ({
+        type: SHIP_TYPES[0],
+        pos: AIM_TRAINING_PLACEHOLDER_POS,
+        quat: AIM_TRAINING_PLACEHOLDER_QUAT,
+        behavior: 'drifter' as const
+      }))
+    ],
+    hitsToKillEnemy: 3,
+    hitsToKillPlayer: 999, // unreachable — drones never fire, this drill has no lose condition
+    includeStation: false,
+    winCondition: 'survive',
+    surviveDurationSec: 90
+  },
+  {
     id: 'slow-turret-drill',
     name: 'Slow Turret Drill',
     description:
@@ -122,32 +149,5 @@ export const SCENARIOS: ScenarioConfig[] = [
       startZ: 250, gateCount: 8, spacingZ: 150, turns: 1, rollRadius: 90, gateRadius: 38
     }),
     surviveDurationSec: 35
-  },
-  {
-    id: 'aim-training',
-    name: 'Aim Training',
-    description:
-      'A swarm of harmless drones — some circle you, some streak past on random flight lines. ' +
-      'Hold position (or move freely) and practice yaw/pitch tracking with ESP engaged. No lose condition — ' +
-      'just an accuracy score at the end.',
-    enemySpawns: [
-      ...Array.from({ length: 4 }, () => ({
-        type: SHIP_TYPES[0],
-        pos: AIM_TRAINING_PLACEHOLDER_POS,
-        quat: AIM_TRAINING_PLACEHOLDER_QUAT,
-        behavior: 'orbiter' as const
-      })),
-      ...Array.from({ length: 4 }, () => ({
-        type: SHIP_TYPES[0],
-        pos: AIM_TRAINING_PLACEHOLDER_POS,
-        quat: AIM_TRAINING_PLACEHOLDER_QUAT,
-        behavior: 'drifter' as const
-      }))
-    ],
-    hitsToKillEnemy: 3,
-    hitsToKillPlayer: 999, // unreachable — drones never fire, this drill has no lose condition
-    includeStation: false,
-    winCondition: 'survive',
-    surviveDurationSec: 90
   }
 ];
