@@ -151,12 +151,21 @@ something reintroduced camera-position coupling to roll before reaching for
 this stabilization trick again.
 
 **Coupled vs. decoupled mode** mirrors SC: coupled mode applies linear drag
-and hard-caps speed at each ship's `scmSpeed`; decoupled mode has neither
-(pure Newtonian coasting). `spaceBrakeOn` is hold-to-brake — recomputed every
-tick from `isActive('spaceBrake')` OR a held joystick button, NOT a toggle
-(unlike `decoupled`, which is a real edge-triggered toggle) — that actively
-kills velocity in either mode (works in decoupled since there's no passive
-drag there).
+(auto-damping — velocity bleeds off when you let go of the stick); decoupled
+mode has none of that, so you coast freely on whatever velocity you have
+(pure Newtonian coasting) until you thrust against it. The SCM/boost speed
+limiter, though, is **not** part of that drag and applies in both modes —
+decoupling lets you fly without your nose needing to point along your
+velocity vector, it doesn't let you exceed SCM speed; a decoupled boost can
+push past `scmSpeed` same as a coupled one, but the moment boost ends, speed
+snaps straight back down to `scmSpeed` even with no drag to carry it there.
+`spaceBrakeOn` is hold-to-brake — recomputed every tick from
+`isActive('spaceBrake')` OR a held joystick button, NOT a toggle (unlike
+`decoupled`, which is a real edge-triggered toggle) — and the passive drag
+is skipped while braking (brake's own thrust-based counter-force already
+decelerates at the ship's actual thrust rating; stacking drag on top made a
+full brake decelerate harder than the ship's strongest engine could ever
+accelerate it).
 
 **Gladius is the only ship.** `SHIP_TYPES` (in `ship/shipTypes.ts`) has a
 single entry, with mass/thrust/drag values back-derived from real SCM speed

@@ -72,6 +72,31 @@ describe('boosted speed cap', () => {
     const speed = Math.hypot(ship.vel.x, ship.vel.y, ship.vel.z);
     expect(speed).toBeLessThanOrEqual(ship.type.scmSpeedBack + 1e-6);
   });
+
+  it('still applies while decoupled — decoupling removes auto-damping drag, not the SCM/boost speed limiter', () => {
+    const ship = makeShip(SHIP_TYPES[0]);
+    ship.decoupled = true;
+    const highSpeed = (ship.type.scmSpeed + ship.type.boostSpeedForward) / 2;
+    ship.vel = { x: 0, y: 0, z: highSpeed };
+    step(ship, 0.016); // no boost key held
+    const speed = Math.hypot(ship.vel.x, ship.vel.y, ship.vel.z);
+    expect(speed).toBeLessThanOrEqual(ship.type.scmSpeed + 1e-6);
+  });
+
+  it('lets a decoupled boost exceed scmSpeed, then snaps back to scmSpeed the instant boost ends', () => {
+    const ship = makeShip(SHIP_TYPES[0]);
+    ship.decoupled = true;
+    const highSpeed = (ship.type.scmSpeed + ship.type.boostSpeedForward) / 2;
+    ship.vel = { x: 0, y: 0, z: highSpeed };
+    keys['ShiftLeft'] = true;
+    step(ship, 0.016);
+    expect(Math.hypot(ship.vel.x, ship.vel.y, ship.vel.z)).toBeGreaterThan(ship.type.scmSpeed);
+
+    keys['ShiftLeft'] = false;
+    step(ship, 0.016);
+    const speed = Math.hypot(ship.vel.x, ship.vel.y, ship.vel.z);
+    expect(speed).toBeLessThanOrEqual(ship.type.scmSpeed + 1e-6);
+  });
 });
 
 describe('boosted rotation-rate cap', () => {
