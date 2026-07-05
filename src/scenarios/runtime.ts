@@ -148,7 +148,7 @@ export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: numbe
         }
         continue;
       }
-      FighterAI.orbiterThink(enemy, dt);
+      FighterAI.orbiterThink(enemy, player, dt);
       continue;
     }
 
@@ -165,23 +165,14 @@ export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: numbe
             enemy.drift.respawnTimer = 0;
             enemy.drift.rollTimer = 0;
             enemy.drift.rollCooldown = 0;
+            enemy.drift.turn = undefined; // in case it died mid turn-around
           }
         }
         continue;
       }
-      const outOfRange = FighterAI.driftThink(enemy, player, dt);
-      if (outOfRange) {
-        const s = FighterAI.spawnDriftState(player, runtime.config.droneAggressiveness ?? 0.5);
-        enemy.pos = s.pos;
-        enemy.vel = s.vel;
-        enemy.quat = lookAtQuat(s.vel);
-        // if it teleported mid-barrel-roll, don't let the corkscrew continue around its old (now
-        // stale) flight-direction frame at the new spawn point — see the health-respawn branch above
-        if (enemy.drift) {
-          enemy.drift.rollTimer = 0;
-          enemy.drift.rollCooldown = 0;
-        }
-      }
+      // no out-of-range teleport here — driftThink itself banks into a turn-around once it's flown
+      // too far (see DRIFTER_TUNING.turnDist), so the same drone keeps making passes indefinitely
+      FighterAI.driftThink(enemy, player, dt, runtime.config.droneAggressiveness ?? 0.5);
       continue;
     }
 

@@ -73,7 +73,8 @@ export type EnemyBehavior =
   | 'fighter'  // full Newtonian flight, driven by combat/enemyAI.ts through physics/flightModel.ts
   | 'chaser'   // holds station behind the player and fires — see combat/enemyAI.ts chaserThink
   | 'orbiter'  // circles a fixed point near the player at a fixed radius, harmless — see combat/enemyAI.ts orbiterThink
-  | 'drifter'  // straight-line pass-by, harmless, recycles once out of range — see combat/enemyAI.ts driftThink
+  | 'drifter'  // straight-line pass-by, harmless, banks into a long reversal roll once out of range
+               // instead of despawning — see combat/enemyAI.ts driftThink
   | 'cruiser'; // flies dead straight at its spawn velocity forever, no steering, harmless — see combat/enemyAI.ts cruiseThink
 
 // Per-enemy state for the 'orbiter' behavior — a fixed circular path around a world-space point
@@ -96,6 +97,17 @@ export interface OrbitState {
   rollAxisUp?: Vec3;       // enemyAI.ts's advanceBarrelRoll
 }
 
+// An in-progress turn-around maneuver — see combat/enemyAI.ts's startDriftTurn/advanceDriftTurn.
+export interface DriftTurnState {
+  fromDir: Vec3;      // heading at the moment the turn started (unit vector)
+  axis: Vec3;         // unit rotation axis the heading sweeps around, fromDir -> the new heading
+  angleTotal: number; // radians between fromDir and the new heading
+  speed: number;      // m/s, held constant through the turn (same as the pass before it)
+  elapsed: number;    // seconds into the turn so far
+  duration: number;   // total seconds the turn takes
+  rollTurns: number;  // full rotations about its own axis over the course of the turn
+}
+
 // Per-enemy state for the 'drifter' behavior — ballistic straight-line flight, no steering.
 export interface DriftState {
   respawnTimer: number; // elapsed seconds since death, 0 while alive — see scenarios/runtime.ts
@@ -106,6 +118,7 @@ export interface DriftState {
   rollOffsetPrev?: Vec3; // last tick's applied corkscrew offset — pos here is integrated
                          // incrementally (unlike the orbiter's from-scratch recompute), so this is
                          // needed to apply only the delta each tick instead of compounding it
+  turn?: DriftTurnState; // set while banking through a turn-around — see driftThink
 }
 
 // Difficulty knobs for the 'fighter' behavior (see combat/enemyAI.ts for how each is used, and its
