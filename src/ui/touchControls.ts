@@ -1,6 +1,7 @@
 import type { Ship } from '../types';
 import { keys } from '../input/controlsModule';
 import { setFiring } from '../world/weapons';
+import { toggleDecoupled } from '../ship/decoupledPersist';
 
 // ---------- Touch controls (minimal, testing only) ----------
 export function initTouchControls(ship: Ship): void {
@@ -71,7 +72,7 @@ export function initTouchControls(ship: Ship): void {
   bindHold('tb-stop', 'KeyX'); // space brake is hold-to-brake, not a toggle — same as keyboard
 
   document.getElementById('tb-decouple')!.addEventListener('touchstart', e => {
-    ship.decoupled = !ship.decoupled;
+    toggleDecoupled(ship);
     e.preventDefault();
   });
 

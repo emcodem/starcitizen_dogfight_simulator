@@ -301,15 +301,14 @@ function updateHUD(ship: Ship, scenario: ScenarioRuntime | null): void {
   boostEl.className = ship.boosting ? 'value on' : 'value';
   (document.getElementById('bar-boost') as HTMLElement).style.width = boostPct + '%';
   document.getElementById('s-speed')!.textContent = speed.toFixed(1) + ' m/s';
-  document.getElementById('s-decoupled')!.textContent = ship.decoupled ? 'ON' : 'OFF';
+  const decoupledEl = document.getElementById('s-decoupled')!;
+  decoupledEl.textContent = ship.decoupled ? 'ON' : 'OFF';
+  decoupledEl.className = ship.decoupled ? 'value on' : 'value';
   const brakeEl = document.getElementById('s-brake')!;
   brakeEl.textContent = ship.spaceBrakeOn ? 'ON' : 'OFF';
   brakeEl.className = ship.spaceBrakeOn ? 'value on' : 'value';
   document.getElementById('s-mass')!.textContent = ship.type.mass.toFixed(2);
   document.getElementById('s-ship')!.textContent = ship.type.name;
-  const flag = document.getElementById('s-mode-flag')!;
-  flag.textContent = ship.decoupled ? 'DECOUPLED' : 'COUPLED';
-  flag.className = ship.decoupled ? 'on' : '';
 }
 
 export function render(ship: Ship, scenario: ScenarioRuntime | null = null): void {

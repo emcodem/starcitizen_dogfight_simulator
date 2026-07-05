@@ -8,6 +8,7 @@ import * as MouseLook from '../input/mouseLook';
 import { STATION, isStationActive } from '../world/station';
 import { updateProjectiles } from '../world/weapons';
 import { resetShip } from '../ship/shipState';
+import { toggleDecoupled } from '../ship/decoupledPersist';
 import { integrateFlight, resolveBoost } from './flightModel';
 
 const HIT_FLASH_FADE_SECONDS = 0.4;
@@ -27,7 +28,7 @@ export function step(ship: Ship, dt: number): void {
 
   // decouple is a real toggle (edge-detected, fires once per press); space brake and boost are
   // hold-based, not toggles — active for exactly as long as the key/button is held
-  if (JoystickButtons.justPressed('decoupleToggle')) ship.decoupled = !ship.decoupled;
+  if (JoystickButtons.justPressed('decoupleToggle')) toggleDecoupled(ship);
   ship.spaceBrakeOn = ControlsModule.isActive('spaceBrake') || JoystickButtons.isPressed('spaceBrake');
 
   const boostRequested = ControlsModule.isActive('boost') || JoystickButtons.isPressed('boost');
