@@ -34,10 +34,26 @@ Menu automation:
 - Dismiss the startup modal: click `#startup-modal-ok` (may appear more
   than once — loop it).
 - Start a scenario: `page.locator('.scenario-card', { hasText: 'NAME' }).locator('button').click()`.
-- Click `#c` (the canvas) once to focus it before sending keys.
+- **Never click `#c` (the canvas) or `#mouse-capture-hint`.** Both have a
+  click listener that calls `canvas.requestPointerLock()`
+  (`ui/mouseCapture.ts`). Playwright's Chromium is a real (just
+  off-desktop/uncomposited) window, not a true virtual framebuffer, so on
+  Windows this actually confines the *user's physical mouse cursor* to that
+  window's rectangle — reported symptom: cursor stuck in an invisible area
+  until alt-tab (alt-tab causes a `window blur`, and `mouseLook.ts` releases
+  the lock on blur as a belt-and-suspenders measure — that's why alt-tab
+  "fixes" it). Don't reach for `.focus()` on the canvas either — it's not
+  needed either way, see next point.
+- No canvas focus step is needed before sending keys: `keydown`/`keyup`
+  listeners are attached to `window` (`ui/fullscreenGuard.ts`), not the
+  canvas, so keyboard input works regardless of what currently has focus.
 - Fire without needing Pointer Lock: hold `ShiftRight` down
   (`initKeyboardFireFallback` in `mouseCapture.ts` — no mouse capture
-  required, avoids Pointer Lock flakiness in headless Chromium).
+  required, and avoids the cursor-capture bug above entirely).
+- If a script ever does need to exercise real mouse-look/Pointer Lock,
+  explicitly release it before `browser.close()`:
+  `await page.evaluate(() => document.exitPointerLock?.());` — don't rely on
+  process teardown alone to release an OS-level cursor clip.
 
 ## Reading real game state — temporary debug hook
 
