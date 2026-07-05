@@ -2,7 +2,11 @@ import type { ActionName, AxisConcept } from '../../types';
 import * as ControlsModule from '../../input/controlsModule';
 import * as GamepadModule from '../../input/gamepadModule';
 import * as JoystickAxes from '../../input/joystickAxes';
-import { getAxisMap, bindAxis, unbindAxis, getButtonMap, bindButton, unbindButton } from '../../input/deviceState';
+import {
+  getAxisMap, bindAxis, unbindAxis,
+  getButtonMap, bindButton, unbindButton,
+  getMouseButtonMap, bindMouseButton, unbindMouseButton
+} from '../../input/deviceState';
 import { onConfigApplied } from '../../input/configRegistry';
 
 const bindingsList = document.getElementById('ctrl-bindings-list') as HTMLElement;
@@ -88,6 +92,7 @@ function pollAxisRebind(): void {
 function startAxisRebind(concept: AxisConcept): void {
   cancelAxisRebind();
   cancelButtonRebind();
+  cancelMouseRebind();
   pendingRebindAction = null; // mutually exclusive with a pending keyboard rebind
   pendingAxisRebindConcept = concept;
   GamepadModule.poll();
@@ -116,7 +121,7 @@ window.addEventListener('keydown', e => {
 // rising edge: any button not already held at capture start that becomes
 // pressed is the one bound. No direction pairing needed (one action, one button).
 // =====================================================================
-const BUTTON_BINDABLE_ACTIONS: ActionName[] = ['decoupleToggle', 'spaceBrake', 'boost'];
+const BUTTON_BINDABLE_ACTIONS: ActionName[] = ['decoupleToggle', 'spaceBrake', 'boost', 'primaryFire'];
 let pendingButtonRebindAction: ActionName | null = null;
 let buttonRebindBaseline: Array<{ index: number; buttons: boolean[] }> | null = null;
 let buttonRebindRAF: number | null = null;
@@ -163,6 +168,7 @@ function pollButtonRebind(): void {
 function startButtonRebind(action: ActionName): void {
   cancelAxisRebind();
   cancelButtonRebind();
+  cancelMouseRebind();
   pendingRebindAction = null; // mutually exclusive with a pending keyboard rebind
   pendingButtonRebindAction = action;
   GamepadModule.poll();
@@ -182,15 +188,71 @@ window.addEventListener('keydown', e => {
   renderBindings();
 });
 
+// =====================================================================
+// Mouse BUTTON rebind capture — same one-action-one-button idea as the joystick button
+// capture above, but there's no live device to poll: a mouse click is a discrete DOM event,
+// so capture is a single one-shot 'mousedown' listener (capture phase, so it intercepts the
+// click before it can also request pointer-lock capture or reach game input) rather than a
+// per-frame poll loop.
+// =====================================================================
+const MOUSE_BUTTON_BINDABLE_ACTIONS: ActionName[] = ['primaryFire', 'spaceBrake', 'boost'];
+let pendingMouseRebindAction: ActionName | null = null;
+
+// Pitch/yaw are always driven by mouse-look (absolute virtual-stick deflection — see
+// mouseLook.ts), additively with keyboard/joystick, so there's no separate discrete mouse
+// *button* to bind for them — the Mouse column just says so instead of offering a bind button.
+const MOUSE_LOOK_FIXED_ACTIONS: ActionName[] = ['pitchUp', 'pitchDown', 'yawLeft', 'yawRight'];
+
+function mouseButtonLabel(button: number): string {
+  return ({ 0: 'Left Click', 1: 'Middle Click', 2: 'Right Click', 3: 'Back Button', 4: 'Forward Button' } as Record<number, string>)[button] || `Mouse Button ${button}`;
+}
+
+function onMouseRebindCapture(e: MouseEvent): void {
+  if (!pendingMouseRebindAction) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  const action = pendingMouseRebindAction;
+  bindMouseButton(action, { button: e.button, label: mouseButtonLabel(e.button) });
+  rebindStatus.textContent = `Bound "${mouseButtonLabel(e.button)}" to ${ControlsModule.getActionLabels()[action]}.`;
+  cancelMouseRebind();
+  renderBindings();
+}
+
+function cancelMouseRebind(): void {
+  if (pendingMouseRebindAction !== null) window.removeEventListener('mousedown', onMouseRebindCapture, true);
+  pendingMouseRebindAction = null;
+}
+
+function startMouseRebind(action: ActionName): void {
+  cancelAxisRebind();
+  cancelButtonRebind();
+  pendingRebindAction = null; // mutually exclusive with a pending keyboard rebind
+  pendingMouseRebindAction = action;
+  rebindStatus.textContent = `Click a mouse button for "${ControlsModule.getActionLabels()[action]}"… (Esc to cancel)`;
+  renderBindings();
+  window.addEventListener('mousedown', onMouseRebindCapture, true);
+}
+
+// Escape cancels an in-progress mouse capture (see note above the axis-capture handler
+// re: stopPropagation)
+window.addEventListener('keydown', e => {
+  if (e.code !== 'Escape' || !pendingMouseRebindAction) return;
+  e.stopPropagation();
+  cancelMouseRebind();
+  rebindStatus.textContent = 'Mouse bind cancelled.';
+  renderBindings();
+});
+
 export function renderBindings(): void {
   const labels = ControlsModule.getActionLabels();
   const bindings = ControlsModule.getBindings();
   const stick = JoystickAxes.read();
   const axisMap = getAxisMap();
   const buttonMap = getButtonMap();
+  const mouseButtonMap = getMouseButtonMap();
 
   let html = '<table id="ctrl-bindings-table"><thead><tr>' +
-    '<th>Action</th><th>Keyboard</th><th>Joystick</th>' +
+    '<th>Action</th><th>Keyboard</th><th>Mouse</th><th>Joystick</th>' +
     '</tr></thead><tbody>';
 
   for (const action of Object.keys(labels) as ActionName[]) {
@@ -199,6 +261,33 @@ export function renderBindings(): void {
     const isPending = pendingRebindAction === action;
     const kbCell = `<div>${isPending ? '<span class="ctrl-found">press a key…</span>' : `<span class="ctrl-found">${chordLabel}</span>`}</div>` +
       `<div style="margin-top:4px"><button type="button" class="ctrl-rebind-btn" data-action="${action}">${isPending ? 'Cancel' : 'Rebind'}</button></div>`;
+
+    let mouseCell: string;
+    if (MOUSE_LOOK_FIXED_ACTIONS.includes(action)) {
+      mouseCell = '<span class="ctrl-found">Mouse Look (fixed)</span>';
+    } else if (MOUSE_BUTTON_BINDABLE_ACTIONS.includes(action)) {
+      const isListening = pendingMouseRebindAction === action;
+      const binding = mouseButtonMap[action];
+      let valueHtml: string;
+      if (isListening) {
+        valueHtml = '<span class="ctrl-found">listening… click a mouse button</span>';
+      } else if (binding) {
+        valueHtml = `<span class="ctrl-found">${binding.label}</span>`;
+      } else {
+        valueHtml = '<span class="ctrl-missing">unbound</span>';
+      }
+      let actionBtnHtml: string;
+      if (isListening) {
+        actionBtnHtml = `<button type="button" class="ctrl-mouse-rebind-btn" data-action="${action}">Cancel</button>`;
+      } else if (binding) {
+        actionBtnHtml = `<button type="button" class="ctrl-mouse-unbind-btn" data-action="${action}">Unbind</button>`;
+      } else {
+        actionBtnHtml = `<button type="button" class="ctrl-mouse-rebind-btn" data-action="${action}">Bind Mouse Button</button>`;
+      }
+      mouseCell = `<div>${valueHtml}</div><div style="margin-top:4px">${actionBtnHtml}</div>`;
+    } else {
+      mouseCell = '<span class="ctrl-missing">—</span>';
+    }
 
     let joyCell: string;
     const concept = ACTION_TO_AXIS_CONCEPT[action];
@@ -255,12 +344,13 @@ export function renderBindings(): void {
       }
       joyCell = `<div>${valueHtml}</div><div style="margin-top:4px">${actionBtnHtml}</div>`;
     } else {
-      joyCell = '<span class="ctrl-missing">— (keyboard/mouse only)</span>';
+      joyCell = '<span class="ctrl-missing">—</span>';
     }
 
     html += `<tr>
       <td class="ctrl-action-label">${labels[action]}</td>
       <td>${kbCell}</td>
+      <td>${mouseCell}</td>
       <td>${joyCell}</td>
     </tr>`;
   }
@@ -269,10 +359,28 @@ export function renderBindings(): void {
 
   bindingsList.querySelectorAll('.ctrl-rebind-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      cancelAxisRebind(); // mutually exclusive with an in-progress joystick capture
+      cancelAxisRebind(); // mutually exclusive with an in-progress joystick or mouse capture
       cancelButtonRebind();
+      cancelMouseRebind();
       const action = btn.getAttribute('data-action') as ActionName;
       pendingRebindAction = pendingRebindAction === action ? null : action;
+      renderBindings();
+    });
+  });
+
+  bindingsList.querySelectorAll('.ctrl-mouse-rebind-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const action = btn.getAttribute('data-action') as ActionName;
+      if (pendingMouseRebindAction === action) { cancelMouseRebind(); renderBindings(); return; }
+      startMouseRebind(action);
+    });
+  });
+
+  bindingsList.querySelectorAll('.ctrl-mouse-unbind-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const action = btn.getAttribute('data-action') as ActionName;
+      unbindMouseButton(action);
+      rebindStatus.textContent = `Unbound mouse button for "${ControlsModule.getActionLabels()[action]}".`;
       renderBindings();
     });
   });

@@ -40,7 +40,7 @@ export function getLastPresetName(): string | null {
 function normalizePresetData(parsed: unknown): Record<string, unknown> | null {
   if (!parsed || typeof parsed !== 'object') return null;
   const obj = parsed as Record<string, unknown>;
-  const looksWrapped = 'keybinds' in obj || 'axisMap' in obj || 'buttonMap' in obj || 'scDevices' in obj || 'mouseLook' in obj;
+  const looksWrapped = 'keybinds' in obj || 'axisMap' in obj || 'buttonMap' in obj || 'mouseButtonMap' in obj || 'scDevices' in obj || 'mouseLook' in obj;
   return looksWrapped ? obj : { keybinds: obj };
 }
 

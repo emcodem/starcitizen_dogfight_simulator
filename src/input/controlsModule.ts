@@ -61,7 +61,8 @@ function defaultBindings(): KeyBindings {
     strafeDown:     [['ControlLeft'], ['KeyF']],
     decoupleToggle: [['KeyC']],
     spaceBrake:     [['KeyX']],
-    boost:          [['ShiftLeft']]
+    boost:          [['ShiftLeft']],
+    primaryFire:    [] // unbound by default on keyboard — default fire input is the mouse (see deviceState.ts)
   };
 }
 
@@ -84,7 +85,7 @@ const ACTION_LABELS: Record<ActionName, string> = {
   strafeForward: 'Strafe forward', strafeBack: 'Strafe back',
   strafeLeft: 'Strafe left', strafeRight: 'Strafe right',
   strafeUp: 'Strafe up', strafeDown: 'Strafe down',
-  decoupleToggle: 'Decouple toggle', spaceBrake: 'Space brake', boost: 'Boost'
+  decoupleToggle: 'Decouple toggle', spaceBrake: 'Space brake', boost: 'Boost', primaryFire: 'Primary fire'
 };
 
 // Best-effort mapping from our sim actions to real SC action identifiers.
@@ -104,7 +105,8 @@ const ACTION_NAME_CANDIDATES: Record<ActionName, string[]> = {
   strafeDown:     ['v_strafe_down'],
   decoupleToggle: ['v_ifcs_vector_decoupling_toggle'],
   spaceBrake:     ['v_space_brake'],
-  boost:          ['v_afterburner']
+  boost:          ['v_afterburner'],
+  primaryFire:    ['v_attack1']
 };
 
 const TOKEN_TO_CODE: Record<string, string> = {

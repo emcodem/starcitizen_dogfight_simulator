@@ -1,5 +1,4 @@
 import * as MouseLook from '../input/mouseLook';
-import { setFiring } from '../world/weapons';
 import { onConfigApplied } from '../input/configRegistry';
 
 function syncMouseSettingsUI(): void {
@@ -33,14 +32,8 @@ export function initMouseCapture(): void {
     if (statusEl) statusEl.textContent = captured ? 'Captured — Esc or alt-tab to release.' : 'Not captured — click the game view to enable.';
   });
 
-  // fire weapons — left mouse button, but only once the pointer is already
-  // captured (so the very first click just captures the mouse, as before)
-  canvas.addEventListener('mousedown', e => {
-    if (e.button === 0 && MouseLook.isCaptured()) setFiring(true);
-  });
-  window.addEventListener('mouseup', e => {
-    if (e.button === 0) setFiring(false);
-  });
+  // primary fire itself is polled each physics tick from the configured mouse button
+  // (see physics/step.ts + input/mouseButtons.ts) — nothing to wire here anymore.
 
   syncMouseSettingsUI();
   const sensSlider = document.getElementById('ctrl-mouse-sens') as HTMLInputElement;
@@ -57,10 +50,4 @@ export function initMouseCapture(): void {
   window.addEventListener('keydown', e => {
     if (e.code === 'KeyV' && MouseLook.isCaptured()) MouseLook.recenter();
   });
-}
-
-// keyboard fallback for firing (works without mouse-look captured, e.g. keyboard-only play)
-export function initKeyboardFireFallback(): void {
-  window.addEventListener('keydown', e => { if (e.code === 'ShiftRight') setFiring(true); });
-  window.addEventListener('keyup', e => { if (e.code === 'ShiftRight') setFiring(false); });
 }

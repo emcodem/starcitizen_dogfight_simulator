@@ -49,9 +49,13 @@ export function spawnProjectileFrom(
 
 // Returns true when a new player-owned shot was spawned this tick — used to tally shotsFired
 // for the scenario accuracy stats (see scenarios/runtime.ts).
-export function updateProjectiles(dt: number, ship: Ship): boolean {
+// `extraFiring` covers input sources that are freshly polled every physics tick (keyboard chord,
+// joystick trigger, mouse button) rather than toggled by a persistent hold event like `firing`
+// (touch's on-screen fire button) — OR'd together rather than routed through setFiring so a
+// released trigger/key can't get stuck "on" from a stale setFiring(true) call.
+export function updateProjectiles(dt: number, ship: Ship, extraFiring = false): boolean {
   let firedThisTick = false;
-  if (firing && fireCooldown <= 0) {
+  if ((firing || extraFiring) && fireCooldown <= 0) {
     const { forward, right, up } = computeAxes(ship.quat);
     spawnProjectileFrom(ship.pos, ship.vel, forward, right, up, 'player');
     fireCooldown = 1 / WEAPON.fireRate;

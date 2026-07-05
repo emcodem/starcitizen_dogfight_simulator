@@ -1,4 +1,4 @@
-import type { ActionName, AxisBinding, AxisConcept, ButtonBinding, ScDevice } from '../types';
+import type { ActionName, AxisBinding, AxisConcept, ButtonBinding, MouseButtonBinding, MouseButtonMap, ScDevice } from '../types';
 import { registerConfig } from './configRegistry';
 
 // Shared mutable joystick state: which physical devices the last-imported actionmaps.xml
@@ -9,6 +9,11 @@ import { registerConfig } from './configRegistry';
 let scDevices: ScDevice[] = []; // devices parsed from the user's actionmaps.xml
 let axisMap: Partial<Record<AxisConcept, AxisBinding>> = {};
 let buttonMap: Partial<Record<ActionName, ButtonBinding>> = {};
+
+// Unlike axisMap/buttonMap (device-specific, so there's no sane universal default), a mouse
+// binding is universal like a keyboard default — so primaryFire ships bound to left-click.
+const DEFAULT_MOUSE_BUTTON_MAP: MouseButtonMap = { primaryFire: { button: 0, label: 'Left Click' } };
+let mouseButtonMap: MouseButtonMap = { ...DEFAULT_MOUSE_BUTTON_MAP };
 
 export function getScDevices(): ScDevice[] {
   return scDevices;
@@ -43,6 +48,19 @@ export function unbindButton(action: ActionName): void {
   delete buttonMap[action];
 }
 
+export function getMouseButtonMap(): MouseButtonMap {
+  return mouseButtonMap;
+}
+export function setMouseButtonMap(map: MouseButtonMap): void {
+  mouseButtonMap = map;
+}
+export function bindMouseButton(action: ActionName, binding: MouseButtonBinding): void {
+  mouseButtonMap[action] = binding;
+}
+export function unbindMouseButton(action: ActionName): void {
+  delete mouseButtonMap[action];
+}
+
 registerConfig({
   key: 'axisMap',
   serialize: () => axisMap,
@@ -52,6 +70,13 @@ registerConfig({
   key: 'buttonMap',
   serialize: () => buttonMap,
   deserialize: data => { buttonMap = (data as typeof buttonMap) || {}; }
+});
+// A preset saved before this feature existed has no 'mouseButtonMap' key at all, so `data`
+// comes through as undefined here — fall back to the default rather than leaving fire unbound.
+registerConfig({
+  key: 'mouseButtonMap',
+  serialize: () => mouseButtonMap,
+  deserialize: data => { mouseButtonMap = (data as MouseButtonMap) || { ...DEFAULT_MOUSE_BUTTON_MAP }; }
 });
 // scDevices looks like session-detected metadata, but it's load-bearing: an
 // XML-derived axis binding only stores an actionmaps.xml `instance` number,

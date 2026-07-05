@@ -170,7 +170,7 @@ export type ActionName =
   | 'strafeForward' | 'strafeBack'
   | 'strafeLeft' | 'strafeRight'
   | 'strafeUp' | 'strafeDown'
-  | 'decoupleToggle' | 'spaceBrake' | 'boost';
+  | 'decoupleToggle' | 'spaceBrake' | 'boost' | 'primaryFire';
 
 export type KeyChord = string[]; // KeyboardEvent.code values, ANDed together
 export type KeyBindings = Record<ActionName, KeyChord[]>;
@@ -206,6 +206,14 @@ export interface ButtonBinding {
   label: string;
 }
 export type ButtonMap = Partial<Record<ActionName, ButtonBinding>>;
+
+// Mouse-button binding — a separate concept from a joystick ButtonBinding (no vid/pid: there's
+// only ever one system mouse), resolved via native MouseEvent.button rather than the Gamepad API.
+export interface MouseButtonBinding {
+  button: number; // MouseEvent.button: 0=left, 1=middle, 2=right, 3=back, 4=forward
+  label: string;
+}
+export type MouseButtonMap = Partial<Record<ActionName, MouseButtonBinding>>;
 
 export interface ScDevice {
   instance: string;

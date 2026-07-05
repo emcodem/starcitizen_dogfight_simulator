@@ -1,16 +1,21 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as ControlsModule from '../src/input/controlsModule';
-import { getAxisMap, setAxisMap, getButtonMap, setButtonMap, getScDevices, setScDevices } from '../src/input/deviceState';
+import {
+  getAxisMap, setAxisMap, getButtonMap, setButtonMap,
+  getMouseButtonMap, setMouseButtonMap, getScDevices, setScDevices
+} from '../src/input/deviceState';
 import * as MouseLook from '../src/input/mouseLook';
 import * as PresetStore from '../src/input/presetStore';
 import { registerConfig } from '../src/input/configRegistry';
 
 const DEFAULT_MOUSE = { sensitivity: 1.5, invertY: true, deadzone: 0.05 };
+const DEFAULT_MOUSE_BUTTON_MAP = { primaryFire: { button: 0, label: 'Left Click' } };
 
 function resetAllConfig(): void {
   ControlsModule.resetToDefault();
   setAxisMap({});
   setButtonMap({});
+  setMouseButtonMap({ ...DEFAULT_MOUSE_BUTTON_MAP });
   setScDevices([]);
   MouseLook.setSensitivity(DEFAULT_MOUSE.sensitivity);
   MouseLook.setInvertY(DEFAULT_MOUSE.invertY);
@@ -33,6 +38,7 @@ describe('PresetStore', () => {
     });
     setScDevices([{ instance: '1', name: 'Test Stick', guid: 'ABCD1234', vid: '231D', pid: '0110' }]);
     setButtonMap({ spaceBrake: { vid: '231D', pid: '0110', buttonIndex: 4, label: 'Button 4' } });
+    setMouseButtonMap({ primaryFire: { button: 2, label: 'Right Click' } });
     MouseLook.setSensitivity(2.5);
     MouseLook.setInvertY(false);
     MouseLook.setDeadzone(0.2);
@@ -44,6 +50,7 @@ describe('PresetStore', () => {
     expect(ControlsModule.getBindings().boost).toEqual([['ShiftLeft']]);
     expect(getAxisMap().pitch).toBeUndefined();
     expect(getButtonMap().spaceBrake).toBeUndefined();
+    expect(getMouseButtonMap()).toEqual(DEFAULT_MOUSE_BUTTON_MAP);
     expect(getScDevices()).toEqual([]);
     expect(MouseLook.getSensitivity()).toBe(DEFAULT_MOUSE.sensitivity);
 
@@ -54,9 +61,22 @@ describe('PresetStore', () => {
     expect(getAxisMap().yaw).toEqual({ instance: '1', axis: 'x', scName: 'v_yaw' });
     expect(getScDevices()).toEqual([{ instance: '1', name: 'Test Stick', guid: 'ABCD1234', vid: '231D', pid: '0110' }]);
     expect(getButtonMap().spaceBrake).toEqual({ vid: '231D', pid: '0110', buttonIndex: 4, label: 'Button 4' });
+    expect(getMouseButtonMap().primaryFire).toEqual({ button: 2, label: 'Right Click' });
     expect(MouseLook.getSensitivity()).toBe(2.5);
     expect(MouseLook.getInvertY()).toBe(false);
     expect(MouseLook.getDeadzone()).toBe(0.2);
+  });
+
+  it('falls back to the default mouse button map if a preset stores an explicit null for it', async () => {
+    localStorage.setItem('vector_control_preset:null-mouse', JSON.stringify({
+      keybinds: ControlsModule.getBindings(),
+      mouseButtonMap: null
+    }));
+    setMouseButtonMap({});
+
+    await PresetStore.loadPreset('null-mouse');
+
+    expect(getMouseButtonMap()).toEqual(DEFAULT_MOUSE_BUTTON_MAP);
   });
 
   it('migrates a legacy preset that stored only a raw keybind map', async () => {

@@ -6,6 +6,7 @@ import * as ControlsModule from '../input/controlsModule';
 import * as GamepadModule from '../input/gamepadModule';
 import * as JoystickAxes from '../input/joystickAxes';
 import * as JoystickButtons from '../input/joystickButtons';
+import * as MouseButtons from '../input/mouseButtons';
 import * as MouseLook from '../input/mouseLook';
 import { STATION, isStationActive } from '../world/station';
 import { updateProjectiles } from '../world/weapons';
@@ -31,11 +32,15 @@ export function step(ship: Ship, dt: number, activeRuntime: ScenarioRuntime | nu
   const stick = JoystickAxes.read();
 
   // decouple is a real toggle (edge-detected, fires once per press); space brake and boost are
-  // hold-based, not toggles — active for exactly as long as the key/button is held
+  // hold-based, not toggles — active for exactly as long as the key/button is held. Mouse buttons
+  // only count once the pointer is actually captured — see the primaryFire comment below for why.
+  const mouseReady = MouseLook.isCaptured();
   if (JoystickButtons.justPressed('decoupleToggle')) toggleDecoupled(ship);
-  ship.spaceBrakeOn = ControlsModule.isActive('spaceBrake') || JoystickButtons.isPressed('spaceBrake');
+  ship.spaceBrakeOn = ControlsModule.isActive('spaceBrake') || JoystickButtons.isPressed('spaceBrake') ||
+    (mouseReady && MouseButtons.isPressed('spaceBrake'));
 
-  const boostRequested = ControlsModule.isActive('boost') || JoystickButtons.isPressed('boost');
+  const boostRequested = ControlsModule.isActive('boost') || JoystickButtons.isPressed('boost') ||
+    (mouseReady && MouseButtons.isPressed('boost'));
   const boost = resolveBoost(ship.type, ship.boostMeter, boostRequested, dt);
   ship.boostMeter = boost.boostMeter;
   ship.boosting = boost.boosting;
@@ -127,6 +132,12 @@ export function step(ship: Ship, dt: number, activeRuntime: ScenarioRuntime | nu
     }
   }
 
-  const fired = updateProjectiles(dt, ship);
+  // primary fire — keyboard chord and joystick trigger poll live every tick like any other
+  // action; mouse click only counts once the pointer is actually captured, so the very first
+  // click on the canvas just captures the mouse instead of also firing (see mouseCapture.ts).
+  const firingInput = ControlsModule.isActive('primaryFire') ||
+    JoystickButtons.isPressed('primaryFire') ||
+    (mouseReady && MouseButtons.isPressed('primaryFire'));
+  const fired = updateProjectiles(dt, ship, firingInput);
   if (fired && activeRuntime) activeRuntime.stats.shotsFired++;
 }
