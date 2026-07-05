@@ -65,6 +65,7 @@ describe('orbiterThink', () => {
   });
 
   it('lets the player close or open distance by flying, unlike a player-centered orbit', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(1); // pin the barrel-roll trigger off — see above
     const enemy = makeOrbiter(200);
     orbiterThink(enemy, 1 / 60);
     const before = Math.hypot(enemy.pos.x, enemy.pos.y, enemy.pos.z);
