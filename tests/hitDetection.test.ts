@@ -18,6 +18,7 @@ function makeTestShip(pos: { x: number; y: number; z: number }): Ship {
     boosting: false,
     exploding: false,
     explosionTimer: 0,
+    hitFlash: 0,
     health: createHealth(50)
   };
 }
@@ -46,6 +47,7 @@ describe('resolveHits', () => {
 
     expect(player.health!.points).toBe(49);
     expect(projectiles.length).toBe(0);
+    expect(player.hitFlash).toBe(1);
   });
 
   it('leaves an out-of-radius enemy shot untouched', () => {

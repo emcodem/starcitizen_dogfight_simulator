@@ -174,6 +174,16 @@ function drawPip(ship: Ship, scenario: ScenarioRuntime, cam: Camera): void {
   ctx.stroke();
 }
 
+// General-purpose hit feedback — not scenario-specific, just reacts to ship.hitFlash (set by
+// combat/hitDetection.ts on any confirmed hit against the player, decayed in physics/step.ts).
+// Deliberately subtle: a quick cue, not a distraction from flying.
+function drawHitFlash(ship: Ship): void {
+  if (ship.hitFlash <= 0) return;
+  const alpha = ship.hitFlash * 0.15;
+  ctx.fillStyle = `rgba(255, 40, 40, ${alpha.toFixed(3)})`;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
 function drawExplosion(progress: number): void {
   // progress goes 0 -> 1 over the 1 second explosion; full-screen flash that fades and radiates
   const alpha = 1 - progress;
@@ -337,6 +347,9 @@ export function render(ship: Ship, scenario: ScenarioRuntime | null = null): voi
 
   // predicted-impact-point — only within PIP_RANGE of a live target
   if (scenario) drawPip(ship, scenario, cam);
+
+  // subtle red flash whenever the player takes a hit — general feedback, any scenario
+  drawHitFlash(ship);
 
   // explosion flash overlay on collision
   if (ship.exploding) {

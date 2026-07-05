@@ -52,6 +52,7 @@ export interface Ship {
   exploding: boolean;
   explosionTimer: number;
   health?: Health; // present only while a combat scenario is active — absent in free flight
+  hitFlash: number; // 0..1, set to 1 when the player takes a hit, decays over time (see physics/step.ts)
 }
 
 // Generic points pool for combat scenarios. Currently every hit subtracts a flat 1 point (no

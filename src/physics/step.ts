@@ -10,8 +10,13 @@ import { STATION, isStationActive } from '../world/station';
 import { updateProjectiles } from '../world/weapons';
 import { resetShip } from '../ship/shipState';
 
+const HIT_FLASH_FADE_SECONDS = 0.4;
+
 // ---------- Physics step ----------
 export function step(ship: Ship, dt: number): void {
+  // hit-flash cue fades out on its own — combat/hitDetection.ts sets it back to 1 on a fresh hit
+  ship.hitFlash = Math.max(0, ship.hitFlash - dt / HIT_FLASH_FADE_SECONDS);
+
   // read the current mouse-look deflection (persists until moved back — see MouseLook)
   const mouseInput = MouseLook.consume();
 

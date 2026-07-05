@@ -17,7 +17,8 @@ export function makeShip(type: ShipType): Ship {
     boostMeter: type.boostCapacity,
     boosting: false,
     exploding: false,
-    explosionTimer: 0
+    explosionTimer: 0,
+    hitFlash: 0
   };
 }
 
@@ -32,5 +33,6 @@ export function resetShip(ship: Ship): void {
   ship.boosting = false;
   ship.exploding = false;
   ship.explosionTimer = 0;
+  ship.hitFlash = 0;
   projectiles.length = 0;
 }

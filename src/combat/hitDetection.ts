@@ -15,6 +15,7 @@ export function resolveHits(projectiles: Projectile[], player: Ship, enemies: En
     if (pr.owner === 'enemy') {
       if (player.health && player.health.points > 0 && distance(pr.pos, player.pos) <= player.type.hullRadius) {
         applyDamage(player.health);
+        player.hitFlash = 1; // full-intensity hit-flash cue — fades over time in physics/step.ts
         projectiles.splice(i, 1);
       }
       continue;
