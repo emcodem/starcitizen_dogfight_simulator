@@ -34,7 +34,7 @@ export function buildAimTrainingScenario(opts: AimTrainingOptions = AIM_TRAINING
   const drifterCount = opts.droneCount - orbiterCount;
   return {
     id: 'aim-training',
-    name: 'Aim Training',
+    name: 'Drone Swarm',
     description:
       'A swarm of harmless drones — some circle you, some streak past on random flight lines. ' +
       'Hold position (or move freely) and practice yaw/pitch tracking with ESP engaged. No lose condition — ' +
@@ -96,9 +96,44 @@ export function buildMergeDrillScenario(opts: MergeDrillOptions = MERGE_DRILL_DE
   };
 }
 
+// User-configurable knobs exposed on the Evasive Pilot card (see ui/scenarioMenu.ts).
+export interface EvasivePilotOptions {
+  returnFire: boolean;        // see ScenarioConfig.evasiveReturnFire — defaults off (pure dodge target)
+  durationSec: number | null; // null = indefinite, same convention as AimTrainingOptions.durationSec
+}
+
+export const EVASIVE_PILOT_DEFAULTS: EvasivePilotOptions = { returnFire: false, durationSec: 120 };
+
+export function buildEvasivePilotScenario(opts: EvasivePilotOptions = EVASIVE_PILOT_DEFAULTS): ScenarioConfig {
+  return {
+    id: 'evasive-pilot',
+    name: 'Evasive Pilot',
+    description:
+      'A single bandit locks in 50m off your nose, roll-matched, and won\'t let you pass — juking hard ' +
+      'and unpredictably on every axis to wreck your lead/lag pips with pure jerk. Practice tracking (and ' +
+      'PIP-neutralizing) a target that never gives you a stable read.' +
+      (opts.returnFire ? ' It will snap around and take shots back at you.' : ' It never fires back.'),
+    enemySpawns: [
+      {
+        type: SHIP_TYPES[0],
+        pos: AIM_TRAINING_PLACEHOLDER_POS, // repositioned 50m off the player's nose on scenario start
+        quat: AIM_TRAINING_PLACEHOLDER_QUAT,
+        behavior: 'evasive'
+      }
+    ],
+    hitsToKillEnemy: 999,  // unreachable — it's a standing target for the whole drill, not something to kill
+    hitsToKillPlayer: 999, // unreachable — return fire (if enabled) is tracked via hitsTaken, not a lose state
+    includeStation: false,
+    winCondition: 'survive',
+    surviveDurationSec: opts.durationSec ?? undefined,
+    evasiveReturnFire: opts.returnFire
+  };
+}
+
 export const SCENARIOS: ScenarioConfig[] = [
   buildAimTrainingScenario(),
   buildMergeDrillScenario(),
+  buildEvasivePilotScenario(),
   {
     id: 'slow-turret-drill',
     name: 'Slow Turret Drill',

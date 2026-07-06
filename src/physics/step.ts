@@ -15,11 +15,17 @@ import { toggleDecoupled } from '../ship/decoupledPersist';
 import { integrateFlight, resolveBoost } from './flightModel';
 import * as EspAssist from '../combat/espAssist';
 import { findActivePip } from '../combat/pipTargeting';
+import type { PipTrainerState } from '../combat/pipTrainer';
+import { project } from '../render/projection';
 
 const HIT_FLASH_FADE_SECONDS = 0.4;
 
 // ---------- Physics step ----------
-export function step(ship: Ship, dt: number, activeRuntime: ScenarioRuntime | null = null): void {
+export function step(
+  ship: Ship, dt: number,
+  activeRuntime: ScenarioRuntime | null = null,
+  pipTrainer: PipTrainerState | null = null
+): void {
   // hit-flash cue fades out on its own — combat/hitDetection.ts sets it back to 1 on a fresh hit
   ship.hitFlash = Math.max(0, ship.hitFlash - dt / HIT_FLASH_FADE_SECONDS);
 
@@ -88,6 +94,19 @@ export function step(ship: Ship, dt: number, activeRuntime: ScenarioRuntime | nu
     const pip = findActivePip(ship.pos, ship.vel, cam, activeRuntime.enemies, window.innerWidth, window.innerHeight);
     if (pip) {
       const screenDist = Math.hypot(pip.screenX - window.innerWidth / 2, pip.screenY - window.innerHeight / 2);
+      const stickOffset = MouseLook.getOffset();
+      const stickDist = Math.hypot(stickOffset.x, stickOffset.y);
+      const factor = EspAssist.dampingFactor(screenDist, stickDist);
+      pitchInput *= factor;
+      yawInput *= factor;
+    }
+  } else if (pipTrainer) {
+    // PIP Trainer isn't an EnemyShip, so it can't go through findActivePip — same ESP damping
+    // math, applied directly to its projected screen position instead.
+    const cam = { pos: ship.pos, axes: computeAxes(ship.quat) };
+    const p = project(pipTrainer.pos.x, pipTrainer.pos.y, pipTrainer.pos.z, cam, window.innerWidth, window.innerHeight);
+    if (p) {
+      const screenDist = Math.hypot(p.x - window.innerWidth / 2, p.y - window.innerHeight / 2);
       const stickOffset = MouseLook.getOffset();
       const stickDist = Math.hypot(stickOffset.x, stickOffset.y);
       const factor = EspAssist.dampingFactor(screenDist, stickDist);

@@ -56,18 +56,20 @@ export function computeLeadPoint(
 // shooter's actual current nose, since the player's gun always fires dead-along it rather than
 // snapping to the lead point (see world/weapons.ts). Finds the closest approach between the fired
 // projectile's path and the target's path, both extrapolated at their CURRENT velocity ("fire now,
-// everyone keeps their vector"), and reports whether that closest approach lands within
-// `targetRadius`. `maxTime` bounds the search to the projectile's actual lifetime.
-export function wouldHitIfFiredNow(
+// everyone keeps their vector"), and returns that closest-approach distance. `maxTime` bounds the
+// search to the projectile's actual lifetime. Split out from wouldHitIfFiredNow (below) so callers
+// that need more than a plain hit/no-hit boolean — e.g. combat/enemyAI.ts's evasive pilot, which
+// reacts more urgently the closer this gets to targetRadius rather than only at the instant it
+// actually crosses it — can read the continuous distance directly.
+export function closestApproachIfFiredNow(
   shooterPos: Vec3,
   shooterVel: Vec3,
   shooterForward: Vec3,
   targetPos: Vec3,
   targetVel: Vec3,
-  targetRadius: number,
   projectileSpeed: number,
   maxTime: number
-): boolean {
+): number {
   const projectileVel: Vec3 = {
     x: shooterVel.x + shooterForward.x * projectileSpeed,
     y: shooterVel.y + shooterForward.y * projectileSpeed,
@@ -79,5 +81,18 @@ export function wouldHitIfFiredNow(
   let t = relSpeedSq < 1e-9 ? 0 : -dot(relPos, relVel) / relSpeedSq;
   t = Math.max(0, Math.min(maxTime, t));
   const sep: Vec3 = { x: relPos.x + relVel.x * t, y: relPos.y + relVel.y * t, z: relPos.z + relVel.z * t };
-  return Math.hypot(sep.x, sep.y, sep.z) <= targetRadius;
+  return Math.hypot(sep.x, sep.y, sep.z);
+}
+
+export function wouldHitIfFiredNow(
+  shooterPos: Vec3,
+  shooterVel: Vec3,
+  shooterForward: Vec3,
+  targetPos: Vec3,
+  targetVel: Vec3,
+  targetRadius: number,
+  projectileSpeed: number,
+  maxTime: number
+): boolean {
+  return closestApproachIfFiredNow(shooterPos, shooterVel, shooterForward, targetPos, targetVel, projectileSpeed, maxTime) <= targetRadius;
 }

@@ -49,6 +49,10 @@ export interface ScenarioConfig {
   // Meters — when set, render.ts draws a wireframe "range bubble" of this radius around every live
   // enemy, e.g. to mark a merge drill's hold-station envelope. Omitted draws nothing.
   rangeBubbleRadius?: number;
+  // Evasive Pilot drill only — whether the 'evasive' spawn is allowed to snap around and take shots
+  // back at the player (see combat/enemyAI.ts's evasiveThink 'shootback' mode). Omitted/false means
+  // it's a pure dodge-only target, same difficulty-knob convention as droneAggressiveness.
+  evasiveReturnFire?: boolean;
 }
 
 // A brief visual burst at an enemy's position when it's destroyed — see ENEMY_EXPLOSION_DURATION
@@ -65,7 +69,10 @@ export interface ScenarioRuntime {
   failReason?: 'died' | 'missedGate' | 'timeout'; // set alongside outcome === 'lost'
   elapsedSec: number;
   gateIndex: number; // index of the next uncleared gate in config.gatePath — 'gates' scenarios only
-  stats: { shotsFired: number; hitsLanded: number; kills: number }; // accuracy/kill tracking, shown live (Aim Training HUD) and on the results screen
+  // accuracy/kill tracking, shown live (Aim Training HUD) and on the results screen. hitsTaken is
+  // tracked for every scenario (cheap counter) but only surfaced in the UI for drills whose enemy
+  // can actually fire back during a 'survive' win condition (see ScenarioConfig.evasiveReturnFire).
+  stats: { shotsFired: number; hitsLanded: number; kills: number; hitsTaken: number };
   explosions: EnemyExplosion[]; // active death-effect bursts, pruned as their timers expire
   // Total seconds the player has spent within any live enemy's rangeBubbleRadius (Merge Drill) —
   // accumulated every tick in scenarios/runtime.ts, unused/always 0 for configs without a bubble.

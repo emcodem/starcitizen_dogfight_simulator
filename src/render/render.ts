@@ -9,6 +9,8 @@ import * as EspAssist from '../combat/espAssist';
 import { findActivePip } from '../combat/pipTargeting';
 import { ENEMY_EXPLOSION_DURATION, bubbleTicks } from '../scenarios/runtime';
 import { project as projectShared, type Camera, type ProjectedPoint } from './projection';
+import type { PipTrainerOptions, PipTrainerState } from '../combat/pipTrainer';
+import { SCORE_FLASH_DURATION } from '../combat/pipTrainer';
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
 const ctxOrNull = canvas.getContext('2d');
@@ -166,10 +168,10 @@ const GLADIUS_HALF_LENGTH = 17.5 / 2;
 const GLADIUS_HALF_SPAN = 21 / 2;
 const GLADIUS_HALF_HEIGHT = 5.5 / 2;
 
-// Small fighter-like wireframe silhouette (Aim Training drones), sized to real Gladius dimensions
-// so nose-tail/wingtip-wingtip/top-bottom span exactly 17.5/21/5.5 m — unlike drawWireBox's symmetric
-// cuboid, this has a distinct pointed nose and swept wings so the player can read facing and bank
-// at a glance instead of just position.
+// Fighter-like wireframe silhouette used for every enemy hull, sized to real Gladius dimensions so
+// nose-tail/wingtip-wingtip/top-bottom span exactly 17.5/21/5.5 m — unlike drawWireBox's symmetric
+// cuboid (used only for the station), this has a distinct pointed nose and swept wings so the player
+// can read facing and bank at a glance instead of just position.
 function drawDroneSilhouette(center: Vec3, axes: ShipAxes, cam: Camera, color: string): void {
   const { right, up, forward } = axes;
   const toWorld = (rx: number, ry: number, rz: number): Vec3 => ({
@@ -228,13 +230,7 @@ function drawDroneSilhouette(center: Vec3, axes: ShipAxes, cam: Camera, color: s
 
 function drawEnemyHull(enemy: EnemyShip, cam: Camera): void {
   if (enemy.health.points <= 0) return;
-  const h = enemy.type.hullRadius;
-  const axes = computeAxes(enemy.quat);
-  if (enemy.behavior === 'orbiter' || enemy.behavior === 'drifter' || enemy.behavior === 'cruiser') {
-    drawDroneSilhouette(enemy.pos, axes, cam, '#ff7a45');
-  } else {
-    drawWireBox(enemy.pos, { x: h * 0.6, y: h * 0.2, z: h }, axes, cam, '#ff7a45');
-  }
+  drawDroneSilhouette(enemy.pos, computeAxes(enemy.quat), cam, '#ff7a45');
 }
 
 // Distance + closing-speed readout under every live enemy, not just the one with an active PIP —
@@ -312,6 +308,60 @@ function drawPip(ship: Ship, scenario: ScenarioRuntime, cam: Camera): void {
   ctx.stroke();
 }
 
+// PIP Trainer's target marker — deliberately just the diamond (no hull silhouette, no ESP info
+// readout), since the whole point of this mode is a bare ESP-style PIP rather than a physical
+// ship — see combat/pipTrainer.ts. A progress ring fills in as the hold timer approaches
+// holdDurationSec, and a brief expanding ring marks a scored rep.
+function drawPipTrainerMarker(state: PipTrainerState, opts: PipTrainerOptions, cam: Camera): void {
+  const p = project(state.pos.x, state.pos.y, state.pos.z, cam);
+  if (!p) return;
+  const holdFrac = opts.holdDurationSec > 0 ? clamp(state.holdTimer / opts.holdDurationSec, 0, 1) : 0;
+  const r = 8;
+
+  ctx.strokeStyle = holdFrac > 0 ? `rgba(125,255,160,${(0.6 + 0.4 * holdFrac).toFixed(3)})` : '#ffe696';
+  ctx.lineWidth = 1.5 + holdFrac * 1.5;
+  ctx.beginPath();
+  ctx.moveTo(p.x, p.y - r);
+  ctx.lineTo(p.x + r, p.y);
+  ctx.lineTo(p.x, p.y + r);
+  ctx.lineTo(p.x - r, p.y);
+  ctx.closePath();
+  ctx.stroke();
+
+  if (holdFrac > 0) {
+    ctx.strokeStyle = 'rgba(125,255,160,0.9)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r + 6, -Math.PI / 2, -Math.PI / 2 + holdFrac * Math.PI * 2);
+    ctx.stroke();
+  }
+
+  if (state.scoreFlash > 0) {
+    const progress = 1 - state.scoreFlash / SCORE_FLASH_DURATION;
+    ctx.strokeStyle = `rgba(255,255,255,${(1 - progress).toFixed(3)})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r + 8 + progress * 22, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+}
+
+function updatePipTrainerHUD(state: PipTrainerState, opts: PipTrainerOptions): void {
+  document.getElementById('pip-trainer-reps')!.textContent = `${state.reps}`;
+  document.getElementById('pip-trainer-hold')!.textContent =
+    `${state.holdTimer.toFixed(2)}s / ${opts.holdDurationSec.toFixed(2)}s`;
+  const holdPct = opts.holdDurationSec > 0 ? clamp((state.holdTimer / opts.holdDurationSec) * 100, 0, 100) : 0;
+  (document.getElementById('pip-trainer-hold-bar') as HTMLElement).style.width = `${holdPct}%`;
+  if (opts.durationSec !== null) {
+    const remaining = Math.max(0, opts.durationSec - state.elapsedSec);
+    document.getElementById('pip-trainer-timer-label')!.textContent = 'TIME LEFT';
+    document.getElementById('pip-trainer-timer')!.textContent = `${remaining.toFixed(1)}s`;
+  } else {
+    document.getElementById('pip-trainer-timer-label')!.textContent = 'TIME';
+    document.getElementById('pip-trainer-timer')!.textContent = `${state.elapsedSec.toFixed(1)}s`;
+  }
+}
+
 // Brief burst at an enemy's last position when it's destroyed, so a kill reads as an event instead
 // of the hull silently vanishing (drawEnemyHull stops drawing it the instant health hits 0).
 function drawEnemyExplosions(scenario: ScenarioRuntime, cam: Camera): void {
@@ -341,55 +391,70 @@ function drawEnemyExplosions(scenario: ScenarioRuntime, cam: Camera): void {
 // not tied to any one scenario.
 const EDGE_INDICATOR_MARGIN = 28;
 
-function drawOffscreenIndicators(scenario: ScenarioRuntime, cam: Camera): void {
+// Draws a single edge-of-viewport arrow pointing toward `pos` if it's currently off screen (behind
+// the camera, or in front but outside the canvas bounds) — no-op if it's already visible. Shared by
+// drawOffscreenIndicators (scenario enemies) and the PIP Trainer's own single-marker equivalent, so
+// e.g. the pip flying behind the player during a hard flick is just as findable as a scenario enemy.
+function drawOffscreenArrow(pos: Vec3, cam: Camera, arrowColor: string, labelColor: string): void {
   const w = canvas.width, h = canvas.height;
   const cx = w / 2, cy = h / 2;
   const halfW = cx - EDGE_INDICATOR_MARGIN, halfH = cy - EDGE_INDICATOR_MARGIN;
   const { forward, right, up } = cam.axes;
 
+  const p = project(pos.x, pos.y, pos.z, cam);
+  const onScreen = p !== null && p.x >= 0 && p.x <= w && p.y >= 0 && p.y <= h;
+  if (onScreen) return;
+
+  const dx = pos.x - cam.pos.x, dy = pos.y - cam.pos.y, dz = pos.z - cam.pos.z;
+  const camX = dx * right.x + dy * right.y + dz * right.z;
+  const camY = dx * up.x + dy * up.y + dz * up.z;
+  const camZ = dx * forward.x + dy * forward.y + dz * forward.z;
+
+  // camX/camY line up with screen x/-y the same way project() does; behind the camera that
+  // mapping flips sign, so mirror both components to keep the arrow pointing the way the
+  // player would actually need to turn rather than the mirror-image direction.
+  let dirX = camX, dirY = -camY;
+  if (camZ < 0) { dirX = -dirX; dirY = -dirY; }
+  if (Math.abs(dirX) < 1e-6 && Math.abs(dirY) < 1e-6) dirY = 1; // dead ahead-behind: pick a side
+
+  const angle = Math.atan2(dirY, dirX);
+  const cosA = Math.cos(angle), sinA = Math.sin(angle);
+  const tx = Math.abs(cosA) > 1e-6 ? halfW / Math.abs(cosA) : Infinity;
+  const ty = Math.abs(sinA) > 1e-6 ? halfH / Math.abs(sinA) : Infinity;
+  const t = Math.min(tx, ty);
+  const ex = cx + cosA * t, ey = cy + sinA * t;
+
+  ctx.save();
+  ctx.translate(ex, ey);
+  ctx.rotate(angle);
+  ctx.fillStyle = arrowColor;
+  ctx.beginPath();
+  ctx.moveTo(10, 0);
+  ctx.lineTo(-7, 6);
+  ctx.lineTo(-7, -6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  const distance = Math.hypot(dx, dy, dz);
+  ctx.textAlign = 'center';
+  ctx.font = '10px Courier New';
+  ctx.fillStyle = labelColor;
+  ctx.fillText(`${distance.toFixed(0)}m`, ex, ey + (sinA >= 0 ? 18 : -14));
+}
+
+function drawOffscreenIndicators(scenario: ScenarioRuntime, cam: Camera): void {
   for (const enemy of scenario.enemies) {
     if (enemy.health.points <= 0) continue;
-    const p = project(enemy.pos.x, enemy.pos.y, enemy.pos.z, cam);
-    const onScreen = p !== null && p.x >= 0 && p.x <= w && p.y >= 0 && p.y <= h;
-    if (onScreen) continue;
-
-    const dx = enemy.pos.x - cam.pos.x, dy = enemy.pos.y - cam.pos.y, dz = enemy.pos.z - cam.pos.z;
-    const camX = dx * right.x + dy * right.y + dz * right.z;
-    const camY = dx * up.x + dy * up.y + dz * up.z;
-    const camZ = dx * forward.x + dy * forward.y + dz * forward.z;
-
-    // camX/camY line up with screen x/-y the same way project() does; behind the camera that
-    // mapping flips sign, so mirror both components to keep the arrow pointing the way the
-    // player would actually need to turn rather than the mirror-image direction.
-    let dirX = camX, dirY = -camY;
-    if (camZ < 0) { dirX = -dirX; dirY = -dirY; }
-    if (Math.abs(dirX) < 1e-6 && Math.abs(dirY) < 1e-6) dirY = 1; // dead ahead-behind: pick a side
-
-    const angle = Math.atan2(dirY, dirX);
-    const cosA = Math.cos(angle), sinA = Math.sin(angle);
-    const tx = Math.abs(cosA) > 1e-6 ? halfW / Math.abs(cosA) : Infinity;
-    const ty = Math.abs(sinA) > 1e-6 ? halfH / Math.abs(sinA) : Infinity;
-    const t = Math.min(tx, ty);
-    const ex = cx + cosA * t, ey = cy + sinA * t;
-
-    ctx.save();
-    ctx.translate(ex, ey);
-    ctx.rotate(angle);
-    ctx.fillStyle = '#ff7a45';
-    ctx.beginPath();
-    ctx.moveTo(10, 0);
-    ctx.lineTo(-7, 6);
-    ctx.lineTo(-7, -6);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-
-    const distance = Math.hypot(dx, dy, dz);
-    ctx.textAlign = 'center';
-    ctx.font = '10px Courier New';
-    ctx.fillStyle = 'rgba(255, 170, 110, 0.85)';
-    ctx.fillText(`${distance.toFixed(0)}m`, ex, ey + (sinA >= 0 ? 18 : -14));
+    drawOffscreenArrow(enemy.pos, cam, '#ff7a45', 'rgba(255, 170, 110, 0.85)');
   }
+}
+
+// Same idea as drawOffscreenIndicators, but for the PIP Trainer's single bare marker — it has no
+// EnemyShip/health to loop over, and uses its own PIP-diamond color (#ffe696) rather than the
+// scenario-enemy orange, so the arrow reads as "the same marker" rather than a different opponent.
+function drawPipTrainerOffscreenIndicator(state: PipTrainerState, cam: Camera): void {
+  drawOffscreenArrow(state.pos, cam, '#ffe696', 'rgba(255, 230, 150, 0.85)');
 }
 
 // ESP reticle — a smaller ring than the mouse-look virtual-stick circle, always visible (unlike
@@ -524,16 +589,29 @@ function drawProgradeMarker(ship: Ship, cam: Camera): void {
   }
 }
 
-function updateHUD(ship: Ship, scenario: ScenarioRuntime | null): void {
+function updateHUD(
+  ship: Ship,
+  scenario: ScenarioRuntime | null,
+  pipTrainer: { state: PipTrainerState; opts: PipTrainerOptions } | null
+): void {
   const scenarioHud = document.getElementById('scenario-hud') as HTMLElement;
+  const pipTrainerHud = document.getElementById('pip-trainer-hud') as HTMLElement;
+  pipTrainerHud.style.display = pipTrainer ? 'block' : 'none';
+  if (pipTrainer) updatePipTrainerHUD(pipTrainer.state, pipTrainer.opts);
+
   if (scenario) {
     scenarioHud.style.display = 'block';
     document.getElementById('scenario-hud-name')!.textContent = scenario.config.name;
 
     const isGates = scenario.config.winCondition === 'gates';
     const isSurvive = scenario.config.winCondition === 'survive';
+    // 'survive' drills normally hide the player-hits row (their enemy never fires — Aim Training,
+    // Merge Drill), but the Evasive Pilot drill's optional return fire needs it, sourced from the
+    // hitsTaken counter (see below) rather than the health-delta the non-survive branch reads,
+    // since a survive drill's hitsToKillPlayer is deliberately unreachable (999).
+    const showPlayerHits = !isSurvive || scenario.config.evasiveReturnFire === true;
     (document.getElementById('scenario-hud-enemy-row') as HTMLElement).style.display = (isGates || isSurvive) ? 'none' : 'flex';
-    (document.getElementById('scenario-hud-player-row') as HTMLElement).style.display = isSurvive ? 'none' : 'flex';
+    (document.getElementById('scenario-hud-player-row') as HTMLElement).style.display = showPlayerHits ? 'flex' : 'none';
     (document.getElementById('scenario-hud-kills-row') as HTMLElement).style.display = isSurvive ? 'flex' : 'none';
     (document.getElementById('scenario-hud-accuracy-row') as HTMLElement).style.display = isSurvive ? 'flex' : 'none';
     (document.getElementById('scenario-hud-gate-row') as HTMLElement).style.display = isGates ? 'flex' : 'none';
@@ -563,14 +641,13 @@ function updateHUD(ship: Ship, scenario: ScenarioRuntime | null): void {
       const accuracy = scenario.stats.shotsFired > 0
         ? Math.round((scenario.stats.hitsLanded / scenario.stats.shotsFired) * 100) : 0;
       document.getElementById('scenario-hud-accuracy')!.textContent = `${accuracy}%`;
+      if (showPlayerHits) document.getElementById('scenario-hud-player-hits')!.textContent = `${scenario.stats.hitsTaken}`;
     } else {
       const enemy = scenario.enemies[0];
       const enemyHits = enemy ? enemy.health.maxPoints - enemy.health.points : 0;
       const enemyMax = enemy ? enemy.health.maxPoints : 0;
       document.getElementById('scenario-hud-enemy-hits')!.textContent = `${enemyHits}/${enemyMax}`;
-    }
 
-    if (!isSurvive) {
       const playerHits = ship.health ? ship.health.maxPoints - ship.health.points : 0;
       const playerMax = ship.health ? ship.health.maxPoints : 0;
       document.getElementById('scenario-hud-player-hits')!.textContent = `${playerHits}/${playerMax}`;
@@ -598,7 +675,11 @@ function updateHUD(ship: Ship, scenario: ScenarioRuntime | null): void {
   document.getElementById('s-ship')!.textContent = ship.type.name;
 }
 
-export function render(ship: Ship, scenario: ScenarioRuntime | null = null): void {
+export function render(
+  ship: Ship,
+  scenario: ScenarioRuntime | null = null,
+  pipTrainer: { state: PipTrainerState; opts: PipTrainerOptions } | null = null
+): void {
   ctx.fillStyle = '#05070a';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -691,6 +772,12 @@ export function render(ship: Ship, scenario: ScenarioRuntime | null = null): voi
   // predicted-impact-point — only within PIP_RANGE of a live target
   if (scenario) drawPip(ship, scenario, cam);
 
+  // PIP Trainer's bare marker — mutually exclusive with the scenario PIP above
+  if (pipTrainer) {
+    drawPipTrainerMarker(pipTrainer.state, pipTrainer.opts, cam);
+    drawPipTrainerOffscreenIndicator(pipTrainer.state, cam);
+  }
+
   // barrel-roll gate path overlay, for evasion drills
   if (scenario) drawGatePath(scenario, cam);
 
@@ -710,5 +797,5 @@ export function render(ship: Ship, scenario: ScenarioRuntime | null = null): voi
   // ESP dampening zone — always visible, regardless of input device
   drawEspCircle();
 
-  updateHUD(ship, scenario);
+  updateHUD(ship, scenario, pipTrainer);
 }

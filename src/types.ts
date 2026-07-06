@@ -101,7 +101,9 @@ export type EnemyBehavior =
   | 'orbiter'  // circles a fixed point near the player at a fixed radius, harmless — see combat/enemyAI.ts orbiterThink
   | 'drifter'  // straight-line pass-by, harmless, banks into a long reversal roll once out of range
                // instead of despawning — see combat/enemyAI.ts driftThink
-  | 'cruiser'; // flies dead straight at its spawn velocity forever, no steering, harmless — see combat/enemyAI.ts cruiseThink
+  | 'cruiser'  // flies dead straight at its spawn velocity forever, no steering, harmless — see combat/enemyAI.ts cruiseThink
+  | 'evasive'; // Evasive Pilot drill only — holds station just ahead of the player's nose, roll-matched,
+               // juking hard and unpredictably to defeat lead/lag pip prediction — see combat/enemyAI.ts evasiveThink
 
 // Per-enemy state for the 'orbiter' behavior — a fixed circular path around a world-space point
 // fixed at spawn/respawn time (near the player, but not re-centered every tick — see
@@ -181,6 +183,32 @@ export interface FighterAIMemory {
   tuning: FighterTuning;
 }
 
+// Persistent per-enemy AI memory for the 'evasive' behavior (Evasive Pilot drill) — see
+// combat/enemyAI.ts's evasiveThink/spawnEvasiveState/EVASIVE_TUNING for how each field is used.
+export interface EvasiveAIMemory {
+  jinkStrafeX: number;        // currently-committed lateral/vertical strafe command, chosen by the
+  jinkStrafeY: number;        // receding-horizon MPC planner (see combat/enemyAI.ts's evasiveThink) —
+                               // held fixed until the next replan, not smoothly converged toward
+  jinkBoost: boolean;         // whether the current MPC-chosen jink candidate also wants boost
+  jinkReplanTimer: number;    // seconds remaining before the MPC planner re-evaluates candidates
+  mode: 'block' | 'shootback'; // 'shootback' only ever entered when the drill's return-fire option is on
+  modeTimer: number;
+  wasThreatened: boolean;     // whether the player's shot would have landed as of last tick — see
+                               // evasiveThink's rising-edge break-now reaction on this flag
+  chasing: boolean;           // true while temporarily nose-forward (not nose-on-player) to use full
+                               // main-engine thrust for a genuine forward-speed deficit — see
+                               // evasiveThink's chase/watch facing hysteresis for why this exists
+  chaseStruggleTimer: number; // seconds spent chasing without the tracking deficit meaningfully
+                               // shrinking — once this crosses a limit, evasiveThink gives up
+                               // physically out-turning the player (a losing battle once the player
+                               // holds a sustained turn at a rate the drone can't out-rotate, since
+                               // both fly the same ship) and forces an immediate break instead — see
+                               // evasiveThink's "give up chasing, force a break" doc comment
+  chaseCooldownTimer: number; // seconds remaining before 'chasing' is allowed to re-engage after a
+                               // forced break, so it doesn't immediately re-enter the same losing
+                               // chase it just gave up on
+}
+
 // A scenario-spawned opponent. Deliberately not a full `Ship` — no player-console concepts like
 // spaceBrakeOn or exploding. `angVel`/`boostMeter`/`boosting` are only actually driven by physics
 // for 'fighter' behavior, but kept non-optional since EnemyShip must satisfy FlightBody (see
@@ -200,8 +228,9 @@ export interface EnemyShip {
   turnRateRadPerSec?: number; // 'turret' only — capped aim-turn rate used by rotateTowards
   ai?: FighterAIMemory;       // 'fighter' only
   fireCooldown: number;
-  orbit?: OrbitState; // 'orbiter' only
-  drift?: DriftState; // 'drifter' only
+  orbit?: OrbitState;       // 'orbiter' only
+  drift?: DriftState;       // 'drifter' only
+  evasive?: EvasiveAIMemory; // 'evasive' only
 }
 
 export type ActionName =

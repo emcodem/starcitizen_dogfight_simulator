@@ -52,12 +52,27 @@ export function startScenario(config: ScenarioConfig, player: Ship): ScenarioRun
       enemy.vel = s.vel;
       enemy.quat = lookAtQuat(s.vel);
       enemy.drift = { respawnTimer: 0 };
+    } else if (enemy.behavior === 'evasive') {
+      // spawns already holding its standoff station dead ahead of the player, nose-on and
+      // roll-matched, rather than needing a tick to fly/turn there from an arbitrary config
+      // pos/quat (same placeholder-pos convention as orbiter/drifter spawns above)
+      const { forward, up } = computeAxes(player.quat);
+      enemy.pos = {
+        x: player.pos.x + forward.x * FighterAI.EVASIVE_TUNING.standoffDistance,
+        y: player.pos.y + forward.y * FighterAI.EVASIVE_TUNING.standoffDistance,
+        z: player.pos.z + forward.z * FighterAI.EVASIVE_TUNING.standoffDistance
+      };
+      // faces back toward the player (see evasiveThink's doc comment on why the nose always does),
+      // not the direction it's facing away toward — lookAtQuat's forward arg is negated accordingly
+      enemy.quat = lookAtQuat({ x: -forward.x, y: -forward.y, z: -forward.z }, up);
+      enemy.vel = { x: player.vel.x, y: player.vel.y, z: player.vel.z };
+      enemy.evasive = FighterAI.spawnEvasiveState();
     }
   }
 
   return {
     config, enemies, outcome: 'active', elapsedSec: 0, gateIndex: 0,
-    stats: { shotsFired: 0, hitsLanded: 0, kills: 0 }, explosions: [], bubbleTimeSec: 0
+    stats: { shotsFired: 0, hitsLanded: 0, kills: 0, hitsTaken: 0 }, explosions: [], bubbleTimeSec: 0
   };
 }
 
@@ -137,6 +152,33 @@ export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: numbe
       continue;
     }
 
+    if (enemy.behavior === 'evasive' && enemy.evasive) {
+      const decision = FighterAI.evasiveThink(enemy, enemy.evasive, player, dt, runtime.config.evasiveReturnFire === true);
+      const boost = resolveBoost(enemy.type, enemy.boostMeter, decision.boostRequested, dt);
+      enemy.boostMeter = boost.boostMeter;
+      enemy.boosting = boost.boosting;
+      integrateFlight(enemy, decision.inputs, dt);
+
+      enemy.fireCooldown -= dt;
+      if (decision.wantsToFire && enemy.fireCooldown <= 0) {
+        // re-check aim post-rotation — see canFireWithinTolerance's doc comment for why.
+        const { forward, right, up } = computeAxes(enemy.quat);
+        const dist = Math.hypot(
+          player.pos.x - enemy.pos.x,
+          player.pos.y - enemy.pos.y,
+          player.pos.z - enemy.pos.z
+        );
+        if (FighterAI.canFireWithinTolerance(
+          forward, decision.aimDir, dist,
+          FighterAI.EVASIVE_TUNING.fireRange, FighterAI.EVASIVE_TUNING.fireLateralTolerance
+        )) {
+          spawnProjectileFrom(enemy.pos, enemy.vel, forward, right, up, 'enemy');
+          enemy.fireCooldown = 1 / WEAPON.fireRate;
+        }
+      }
+      continue;
+    }
+
     if (enemy.behavior === 'orbiter') {
       if (enemy.health.points <= 0) {
         if (enemy.orbit) {
@@ -204,7 +246,7 @@ export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: numbe
   resolveHits(projectiles, player, runtime.enemies, () => runtime.stats.hitsLanded++, enemy => {
     runtime.stats.kills++;
     runtime.explosions.push({ pos: { x: enemy.pos.x, y: enemy.pos.y, z: enemy.pos.z }, timer: ENEMY_EXPLOSION_DURATION });
-  });
+  }, () => runtime.stats.hitsTaken++);
 
   if (runtime.config.rangeBubbleRadius !== undefined) {
     const bubbleRadius = runtime.config.rangeBubbleRadius;

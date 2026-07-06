@@ -41,6 +41,7 @@ canvas { display: block; background: var(--bg); }
 #mode-flag .value.on { border-color: var(--accent); background: rgba(255,122,69,0.12); }
 #reticle-label { bottom: 16px; right: 16px; text-align: right; color: var(--hud-dim); }
 #scenario-hud { top: 16px; left: 50%; transform: translateX(-50%); text-align: center; min-width: 200px; }
+#pip-trainer-hud { top: 16px; left: 50%; transform: translateX(-50%); text-align: center; min-width: 200px; }
 
 /* --- scenario menu --- */
 #scenario-menu-toggle {
@@ -112,6 +113,7 @@ body.touch #restart-toggle { top: auto; bottom: 180px; right: 344px; }
 .scenario-slider-block { display: flex; flex-direction: column; gap: 8px; margin: 2px 0 12px; }
 .scenario-slider-row input[type="range"] { width: 100%; margin: 0; }
 .scenario-slider-top { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 3px; }
+.scenario-checkbox-row { display: flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer; }
 .scenario-slider-value { color: var(--hud); }
 #scenario-menu-result h2 { margin: 0 0 10px; font-size: 16px; letter-spacing: 1px; text-transform: uppercase; }
 #scenario-menu-result.won h2 { color: var(--hud); }
