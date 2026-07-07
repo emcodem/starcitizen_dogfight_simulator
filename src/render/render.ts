@@ -38,6 +38,19 @@ for (let i = 0; i < 140; i++) {
   });
 }
 
+// ---------- Space dust (near-field, speed-reactive streak particles) ----------
+// SC-style ambient dust: invisible at a standstill, fading in and stretching into snow-like
+// streaks as speed rises.
+const dust: Vec3[] = [];
+const DUST_FIELD = 130;
+for (let i = 0; i < 70; i++) {
+  dust.push({
+    x: (Math.random() - 0.5) * DUST_FIELD * 2,
+    y: (Math.random() - 0.5) * DUST_FIELD * 2,
+    z: (Math.random() - 0.5) * DUST_FIELD * 2
+  });
+}
+
 function project(px: number, py: number, pz: number, cam: Camera): ProjectedPoint | null {
   return projectShared(px, py, pz, cam, canvas.width, canvas.height);
 }
@@ -50,6 +63,64 @@ function drawLine3D(x1: number, y1: number, z1: number, x2: number, y2: number, 
   ctx.moveTo(p1.x, p1.y);
   ctx.lineTo(p2.x, p2.y);
   ctx.stroke();
+}
+
+// Streak length is driven by how far a world-fixed dust mote would appear to travel relative to
+// the camera over this short window, given the ship's current velocity — not real elapsed frame
+// time, so streak length is a deterministic function of speed alone (frame-rate independent) and
+// naturally collapses to a dot at zero speed.
+const DUST_STREAK_SECONDS = 0.0225;
+
+function drawSpaceDust(ship: Ship, cam: Camera): void {
+  const speed = Math.hypot(ship.vel.x, ship.vel.y, ship.vel.z);
+  if (speed < 0.05) return; // dead stop — no relative motion, nothing to see
+
+  // Ramps up quickly from zero, then stays low — this is meant to be a faint ambient cue
+  // visible at any nonzero speed, not a bright effect that scales with how fast you're going.
+  const visibility = clamp(Math.sqrt(speed) / 20, 0.05, 0.22);
+
+  const M = DUST_FIELD * 2;
+  ctx.lineCap = 'round';
+  for (const d of dust) {
+    // Wrap the mote's offset FROM the ship (not its absolute position) into (-FIELD, FIELD], then
+    // re-add the ship's current position — this is what actually keeps a world-fixed point's
+    // apparent distance bounded near the ship as it travels indefinitely. Wrapping the absolute
+    // "d + ship.pos" and using that directly (the pattern the beacon field above uses) looks
+    // right only near the origin: the relative offset it produces is constant between wraps and
+    // only resets every 2*DUST_FIELD units of travel, so after flying a couple hundred meters
+    // from spawn every mote silently drifts out of view and stays there.
+    const relX = (((d.x - ship.pos.x) % M) + M) % M - DUST_FIELD;
+    const relY = (((d.y - ship.pos.y) % M) + M) % M - DUST_FIELD;
+    const relZ = (((d.z - ship.pos.z) % M) + M) % M - DUST_FIELD;
+    const wx = ship.pos.x + relX, wy = ship.pos.y + relY, wz = ship.pos.z + relZ;
+
+    const head = project(wx, wy, wz, cam);
+    if (!head) continue;
+    const tail = project(
+      wx + ship.vel.x * DUST_STREAK_SECONDS,
+      wy + ship.vel.y * DUST_STREAK_SECONDS,
+      wz + ship.vel.z * DUST_STREAK_SECONDS,
+      cam
+    );
+    if (!tail) continue;
+
+    const proximity = clamp(1 - head.depth / DUST_FIELD, 0, 1);
+    if (proximity <= 0) continue;
+    const alpha = proximity * visibility;
+
+    // fade the streak from a soft head to a transparent tail, like motion-blurred snow, instead
+    // of a flat hard-edged line
+    const gradient = ctx.createLinearGradient(head.x, head.y, tail.x, tail.y);
+    gradient.addColorStop(0, `rgba(200,225,255,${alpha})`);
+    gradient.addColorStop(1, 'rgba(200,225,255,0)');
+    ctx.strokeStyle = gradient;
+    ctx.lineWidth = clamp(head.scale * 0.5, 0.4, 1.2);
+    ctx.beginPath();
+    ctx.moveTo(head.x, head.y);
+    ctx.lineTo(tail.x, tail.y);
+    ctx.stroke();
+  }
+  ctx.lineCap = 'butt';
 }
 
 function drawMouseReticle(): void {
@@ -766,6 +837,9 @@ export function render(
     }
   }
   ctx.globalAlpha = 1;
+
+  // space dust — speed-reactive streaks; invisible at rest, stretches as speed rises
+  drawSpaceDust(ship, cam);
 
   // static station — a fixed hazard to practice flying around and avoiding (some scenarios hide it)
   if (isStationActive()) drawStation(cam);
