@@ -572,21 +572,40 @@ function drawExplosion(progress: number): void {
   ctx.fillText('COLLISION — RESETTING', cx, cy + 80);
 }
 
-function drawProgradeMarker(ship: Ship, cam: Camera): void {
+// Flight-path-marker-style glyph: a circle with wing dashes left/right and a tail dash on top
+// (no bottom dash), matching the aircraft-HUD velocity-vector symbol. When the true direction of
+// travel can't be projected (ship flying backwards relative to where the camera/nose is facing —
+// the point behind the camera plane), the caller instead passes the retrograde point and asks for
+// the struck-through variant, so the indicator stays visible rather than disappearing.
+function drawVelocityGlyph(x: number, y: number, radius: number, retrograde: boolean): void {
+  const dash = radius * 0.8;
+  ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x - radius, y); ctx.lineTo(x - radius - dash, y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x + radius, y); ctx.lineTo(x + radius + dash, y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x, y - radius); ctx.lineTo(x, y - radius - dash); ctx.stroke();
+  if (retrograde) {
+    ctx.beginPath(); ctx.moveTo(x - radius, y - radius); ctx.lineTo(x + radius, y + radius); ctx.stroke();
+  }
+}
+
+function drawTotalVelocityIndicator(ship: Ship, cam: Camera): void {
   const p = ship.pos;
   const speed = Math.hypot(ship.vel.x, ship.vel.y, ship.vel.z);
-  if (speed > 0.5) {
-    const progradePoint = {
-      x: p.x + ship.vel.x / speed * 40,
-      y: p.y + ship.vel.y / speed * 40,
-      z: p.z + ship.vel.z / speed * 40
-    };
-    const pp = project(progradePoint.x, progradePoint.y, progradePoint.z, cam);
-    if (pp) {
-      ctx.strokeStyle = '#8fd3c7';
-      ctx.beginPath(); ctx.arc(pp.x, pp.y, 6, 0, Math.PI * 2); ctx.stroke();
-    }
+  if (speed <= 0.5) return;
+  const dirx = ship.vel.x / speed, diry = ship.vel.y / speed, dirz = ship.vel.z / speed;
+
+  let pp = project(p.x + dirx * 40, p.y + diry * 40, p.z + dirz * 40, cam);
+  let retrograde = false;
+  if (!pp) {
+    // velocity points behind the camera — flying backwards relative to facing. The opposite
+    // (retrograde) point is then guaranteed to be in front, so show that instead, struck through.
+    pp = project(p.x - dirx * 40, p.y - diry * 40, p.z - dirz * 40, cam);
+    retrograde = true;
   }
+  if (!pp) return;
+
+  ctx.strokeStyle = '#8fd3c7';
+  drawVelocityGlyph(pp.x, pp.y, 6, retrograde);
 }
 
 function updateHUD(
@@ -766,8 +785,8 @@ export function render(
   // weapon tracers
   drawProjectiles(cam);
 
-  // prograde velocity marker (still useful from the cockpit to read decoupled drift)
-  drawProgradeMarker(ship, cam);
+  // total velocity indicator (TVI) — still useful from the cockpit to read decoupled drift
+  drawTotalVelocityIndicator(ship, cam);
 
   // predicted-impact-point — only within PIP_RANGE of a live target
   if (scenario) drawPip(ship, scenario, cam);
