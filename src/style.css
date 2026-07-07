@@ -3,6 +3,7 @@
   --grid: #10161d;
   --hud: #8fd3c7;
   --hud-dim: #3d5a54;
+  --hud-dim-light: #506b65;
   --accent: #ff7a45;
   --danger: #ff4d4d;
   --font-mono: 'Courier New', monospace;
@@ -217,30 +218,30 @@ body.touch #ctrl-toggle { top: auto; bottom: 180px; right: 16px; }
   position: absolute; top: 10px; right: 12px; margin: 0;
 }
 #ctrl-panel section { margin-bottom: 16px; }
-#ctrl-panel label { display: block; color: var(--hud-dim); margin-bottom: 4px; }
+#ctrl-panel label { display: block; color: var(--hud-dim-light); margin-bottom: 4px; }
 #ctrl-panel input[type="text"], #ctrl-panel select {
   width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--hud-dim);
   color: var(--hud); font-family: var(--font-mono); font-size: 12px; padding: 5px; margin-bottom: 6px;
 }
-#ctrl-panel input[type="file"] { font-size: 11px; color: var(--hud-dim); margin-bottom: 6px; }
+#ctrl-panel input[type="file"] { font-size: 11px; color: var(--hud-dim-light); margin-bottom: 6px; }
 #ctrl-panel button {
   background: rgba(255,255,255,0.06); border: 1px solid var(--hud-dim); color: var(--hud);
   font-family: var(--font-mono); font-size: 11px; padding: 6px 10px; cursor: pointer; margin: 0 6px 6px 0;
 }
 #ctrl-panel button:hover { border-color: var(--accent); color: var(--accent); }
-#ctrl-panel .ctrl-status { color: var(--hud-dim); font-size: 11px; min-height: 14px; margin-top: 4px; }
+#ctrl-panel .ctrl-status { color: var(--hud-dim-light); font-size: 11px; min-height: 14px; margin-top: 4px; }
 #ctrl-panel .ctrl-list { font-size: 11px; line-height: 1.6; max-height: 160px; overflow-y: auto; }
 #ctrl-panel .ctrl-found { color: var(--hud); }
-#ctrl-panel .ctrl-missing { color: var(--hud-dim); }
+#ctrl-panel .ctrl-missing { color: var(--hud-dim-light); }
 
 #ctrl-bindings-list.ctrl-list { max-height: none; overflow: visible; }
 #ctrl-bindings-table { width: 100%; border-collapse: collapse; font-size: 11px; }
 #ctrl-bindings-table th {
-  text-align: left; color: var(--hud-dim); text-transform: uppercase; letter-spacing: 0.5px;
+  text-align: left; color: var(--hud-dim-light); text-transform: uppercase; letter-spacing: 0.5px;
   font-size: 10px; padding: 4px 8px 6px; border-bottom: 1px solid var(--hud-dim);
 }
 #ctrl-bindings-table td { padding: 5px 8px; border-bottom: 1px solid rgba(255,255,255,0.06); vertical-align: middle; }
-#ctrl-bindings-table td.ctrl-action-label { color: var(--hud-dim); white-space: nowrap; }
+#ctrl-bindings-table td.ctrl-action-label { color: var(--hud); white-space: nowrap; }
 #ctrl-bindings-table button { margin: 0; }
 
 #mouse-capture-hint {

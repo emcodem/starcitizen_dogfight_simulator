@@ -105,6 +105,7 @@
 <div id="ctrl-panel" style="display:none">
   <button id="ctrl-close-btn" aria-label="Close controls panel">CLOSE</button>
   <h3>Control Preset</h3>
+  <br><br>
 
   <section id="ctrl-preset-storage-section">
     <label>Saved presets (this browser)</label>
@@ -175,7 +176,7 @@
   </section>
 
   <section>
-    <label>Mouse Look (absolute — SC-style virtual joystick)</label>
+    <label style="color:var(--hud)">Mouse Look (absolute — SC-style virtual joystick)</label>
     <div class="ctrl-status" id="ctrl-mouse-status">Not captured — click the game view to enable.</div>
     <label style="margin-top:8px">Sensitivity</label>
     <input type="range" id="ctrl-mouse-sens" min="0.5" max="4" step="0.1" style="width:100%">
@@ -188,7 +189,7 @@
   </section>
 
   <section>
-    <label>ESP / Aim Assist (always active — dampens yaw/pitch near the lead indicator)</label>
+    <label style="color:var(--hud)">ESP / Aim Assist (always active — dampens yaw/pitch near the lead indicator)</label>
     <label style="margin-top:8px">Circle Size</label>
     <input type="range" id="ctrl-esp-circle-size" min="15" max="120" step="5" style="width:100%">
     <label style="margin-top:8px">Dampening Strength</label>

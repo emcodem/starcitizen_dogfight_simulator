@@ -257,10 +257,21 @@ export function renderBindings(): void {
 
   for (const action of Object.keys(labels) as ActionName[]) {
     const chords = bindings[action] || [];
-    const chordLabel = chords.length ? chords.map(ControlsModule.chordToLabel).join(' / ') : '(unbound)';
     const isPending = pendingRebindAction === action;
-    const kbCell = `<div>${isPending ? '<span class="ctrl-found">press a key…</span>' : `<span class="ctrl-found">${chordLabel}</span>`}</div>` +
-      `<div style="margin-top:4px"><button type="button" class="ctrl-rebind-btn" data-action="${action}">${isPending ? 'Cancel' : 'Rebind'}</button></div>`;
+    const hasChord = chords.length > 0;
+    const chordLabel = hasChord
+      ? `<span class="ctrl-found">${chords.map(ControlsModule.chordToLabel).join(' / ')}</span>`
+      : '<span class="ctrl-missing">unbound</span>';
+    let kbBtnHtml: string;
+    if (isPending) {
+      kbBtnHtml = `<button type="button" class="ctrl-rebind-btn" data-action="${action}">Cancel</button>`;
+    } else if (hasChord) {
+      kbBtnHtml = `<button type="button" class="ctrl-kb-unbind-btn" data-action="${action}">Unbind</button>`;
+    } else {
+      kbBtnHtml = `<button type="button" class="ctrl-rebind-btn" data-action="${action}">Bind</button>`;
+    }
+    const kbCell = `<div>${isPending ? '<span class="ctrl-found">press a key…</span>' : chordLabel}</div>` +
+      `<div style="margin-top:4px">${kbBtnHtml}</div>`;
 
     let mouseCell: string;
     if (MOUSE_LOOK_FIXED_ACTIONS.includes(action)) {
@@ -364,6 +375,15 @@ export function renderBindings(): void {
       cancelMouseRebind();
       const action = btn.getAttribute('data-action') as ActionName;
       pendingRebindAction = pendingRebindAction === action ? null : action;
+      renderBindings();
+    });
+  });
+
+  bindingsList.querySelectorAll('.ctrl-kb-unbind-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const action = btn.getAttribute('data-action') as ActionName;
+      ControlsModule.setBinding(action, []);
+      rebindStatus.textContent = `Unbound keyboard key for "${ControlsModule.getActionLabels()[action]}".`;
       renderBindings();
     });
   });
