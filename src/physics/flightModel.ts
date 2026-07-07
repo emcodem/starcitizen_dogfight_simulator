@@ -38,9 +38,19 @@ export interface FlightInputs {
 export function integrateFlight(body: FlightBody, input: FlightInputs, dt: number): void {
   const t = body.type;
 
-  const pitchInput = clamp(input.pitch, -1, 1);
-  const yawInput = clamp(input.yaw, -1, 1);
-  const rollInput = clamp(input.roll, -1, 1);
+  const rawPitch = clamp(input.pitch, -1, 1);
+  const rawYaw = clamp(input.yaw, -1, 1);
+  const rawRoll = clamp(input.roll, -1, 1);
+
+  // Real RCS thrusters draw from one shared rotational-authority budget across
+  // pitch/yaw/roll — without this, each axis independently reaches its own max
+  // simultaneously, so combining axes gives a "free" diagonal speed boost
+  // (vector sum of independent maxes) instead of splitting a fixed budget.
+  const inputMag = Math.hypot(rawPitch, rawYaw, rawRoll);
+  const inputScale = inputMag > 1 ? 1 / inputMag : 1;
+  const pitchInput = rawPitch * inputScale;
+  const yawInput = rawYaw * inputScale;
+  const rollInput = rawRoll * inputScale;
 
   // boosting raises RCS authority (angularThrust) and the rotation-rate ceiling (maxAngVel)
   // together — angularThrust is still derived as maxAngVel * angularDrag either way (see
