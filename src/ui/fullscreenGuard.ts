@@ -86,7 +86,7 @@ export function initFullscreenGuard(ship: Ship): void {
 
   document.addEventListener('fullscreenchange', () => {
     const inFullscreen = !!document.fullscreenElement;
-    toggleBtn.textContent = inFullscreen ? '⛶ EXIT FULLSCREEN' : '⛶ FULLSCREEN';
+    toggleBtn.textContent = inFullscreen ? 'F2 EXIT FULLSCREEN' : 'F2 FULLSCREEN';
     toggleBtn.classList.toggle('on', inFullscreen);
     if (inFullscreen && keyboardLockSupported) {
       hint.textContent = '✓ Ctrl+W/Q protected — Esc to exit fullscreen';
@@ -107,11 +107,17 @@ export function initFullscreenGuard(ship: Ship): void {
   }
   hint.addEventListener('click', enterProtectedFullscreen);
 
-  toggleBtn.addEventListener('click', () => {
+  function toggleFullscreen(): void {
     if (document.fullscreenElement) {
       document.exitFullscreen();
     } else {
       enterProtectedFullscreen();
     }
+  }
+  toggleBtn.addEventListener('click', toggleFullscreen);
+  window.addEventListener('keydown', e => {
+    if (e.code !== 'F2') return;
+    e.preventDefault(); // browsers otherwise open a save-page-as/help dialog on F2 depending on browser
+    toggleFullscreen();
   });
 }

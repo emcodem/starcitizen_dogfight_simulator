@@ -365,6 +365,11 @@ export function initScenarioMenu(h: ScenarioMenuHandlers): void {
 
   const toggleBtn = document.getElementById('scenario-menu-toggle') as HTMLElement;
   toggleBtn.addEventListener('click', openMenu);
+  window.addEventListener('keydown', e => {
+    if (e.code !== 'F3') return;
+    e.preventDefault();
+    openMenu();
+  });
 
   showPicker();
 }
