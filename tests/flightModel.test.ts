@@ -29,10 +29,8 @@ describe('integrateFlight — combined-axis input normalization', () => {
       decoupled: true,
     };
 
-    let prevAngVel = { ...body.angVel };
     for (let i = 0; i < 100; i++) {
       integrateFlight(body, input, 0.016);
-      prevAngVel = { ...body.angVel };
     }
 
     // After 100 ticks, angular velocity should settle to steady-state.
