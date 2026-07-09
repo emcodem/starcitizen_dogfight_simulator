@@ -334,8 +334,9 @@ never touches the preset code:
    "PIDVID"). At runtime, `gamepadModule.findByVidPid` matches that against
    whatever the browser currently reports in `navigator.getGamepads()[i].id`
    (Chromium reports non-XInput devices as
-   `"<name> (Vendor: xxxx Product: yyyy)"` — the load-bearing,
-   not-actually-standardized assumption the whole feature rests on).
+   `"<name> (Vendor: xxxx Product: yyyy)"`; Firefox instead prefixes the id
+   with the hex IDs directly, e.g. `"231d-0201- VKBsim Gladiator EVO L"` —
+   `gamepadModule.parseVidPid` tries both formats).
    `physics/step.ts` calls `gamepadModule.poll()` every physics tick (not
    just while the panel is open).
 
@@ -420,10 +421,6 @@ again, that's the line to check (`keys['ArrowUp'] = ny < -0.15` etc.).
 
 ## Startup safety features
 
-- **Browser check** (`ui/startupModal.ts`): `navigator.userAgentData.brands`
-  (Chromium-only API) or UA-string fallback; warns (doesn't hard-block) on
-  non-Chromium browsers, since Gamepad vendor/product string parsing and the
-  Keyboard Lock API are Chromium-specific behaviors this sim leans on.
 - **Ctrl disabled outside fullscreen** (`ui/fullscreenGuard.ts`): the keydown
   handler drops `ControlLeft`/`ControlRight` entirely unless
   `document.fullscreenElement` is set — prevents it from ever reaching game
