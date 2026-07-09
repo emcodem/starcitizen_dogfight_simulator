@@ -47,18 +47,34 @@ describe('space brake', () => {
     expect(ship.vel.z).toBe(0);
   });
 
-  it('decelerates lateral and vertical motion using strafe/vertical thrust independently', () => {
+  it('brakes diagonal (lateral+vertical) motion as one combined-axis maneuver, preserving direction', () => {
     const ship = makeShip(SHIP_TYPES[0]);
     ship.decoupled = true;
     ship.vel = { x: 30, y: -20, z: 0 }; // right (+X) and up (-Y, per axis convention)
     keys['KeyX'] = true;
     const dt = 0.05;
+    const originalRatio = ship.vel.x / -ship.vel.y; // lateral:vertical direction, before braking
     step(ship, dt);
-    const strafeDelta = (ship.type.linearThrust.strafe / ship.type.mass) * dt;
-    // moving in local "up" here, so braking uses the down-thruster's (weaker) rating to counter it
-    const verticalDelta = (ship.type.linearThrust.verticalDown / ship.type.mass) * dt;
-    expect(ship.vel.x).toBeCloseTo(30 - strafeDelta, 3);
-    expect(ship.vel.y).toBeCloseTo(-20 + verticalDelta, 3);
+
+    // Local-frame (lateral=+30, vertical=+20 — moving up uses the weaker down-thruster to brake).
+    // The flight computer can't push each axis at its own independent max without bending the
+    // resultant velocity off its original heading, so the weaker-relative axis (vertical, here)
+    // throttles the whole maneuver down below what either axis could do alone.
+    const speed = Math.hypot(30, 20);
+    const ux = 30 / speed, uy = 20 / speed;
+    const strafeAccel = ship.type.linearThrust.strafe / ship.type.mass;
+    const verticalAccel = ship.type.linearThrust.verticalDown / ship.type.mass;
+    const maxDecel = Math.min(strafeAccel / ux, verticalAccel / uy);
+    const newSpeed = speed - maxDecel * dt;
+
+    expect(ship.vel.x).toBeCloseTo(ux * newSpeed, 3);
+    expect(ship.vel.y).toBeCloseTo(-(uy * newSpeed), 3);
+    // direction is preserved exactly — only the magnitude shrinks
+    expect(ship.vel.x / -ship.vel.y).toBeCloseTo(originalRatio, 6);
+    // combining axes to stay on-heading costs total stopping power vs. braking each axis at its
+    // own independent max (the old, direction-bending behavior) — that would have applied a
+    // combined vector of hypot(strafeAccel, verticalAccel), always >= this single scalar maxDecel
+    expect(maxDecel).toBeLessThan(Math.hypot(strafeAccel, verticalAccel));
   });
 
   it('matches decoupled braking exactly — passive coupled-mode drag is skipped while braking', () => {

@@ -4,6 +4,32 @@ import { makeShip } from '../src/ship/shipState';
 import { SHIP_TYPES } from '../src/ship/shipTypes';
 import type { FlightBody, FlightInputs } from '../src/physics/flightModel';
 
+function runToSteadyState(rawPitch: number, rawYaw: number, boosting: boolean): FlightBody {
+  const ship = makeShip(SHIP_TYPES[0]);
+  const body: FlightBody = {
+    type: ship.type,
+    pos: ship.pos,
+    vel: ship.vel,
+    quat: ship.quat,
+    angVel: { pitch: 0, yaw: 0, roll: 0 },
+    boosting,
+    throttleSpoolTime: 0,
+    verticalSpoolTime: 0,
+  };
+  const input: FlightInputs = {
+    throttle: 0,
+    pitch: rawPitch,
+    yaw: rawYaw,
+    roll: 0,
+    strafeX: 0,
+    strafeY: 0,
+    brake: false,
+    decoupled: true,
+  };
+  for (let i = 0; i < 100; i++) integrateFlight(body, input, 0.016);
+  return body;
+}
+
 describe('integrateFlight — combined-axis input normalization', () => {
   it('should scale down multi-axis input to keep magnitude ≤ 1', () => {
     const ship = makeShip(SHIP_TYPES[0]);
@@ -125,5 +151,61 @@ describe('integrateFlight — combined-axis input normalization', () => {
     expect(Math.abs(body.angVel.pitch - 1.19)).toBeLessThan(0.15);
     expect(Math.abs(body.angVel.yaw)).toBeLessThan(0.05);
     expect(Math.abs(body.angVel.roll)).toBeLessThan(0.05);
+  });
+});
+
+describe('integrateFlight — pitch/yaw angle sweep (0°/45°/90°, normal & boosted)', () => {
+  const gladius = SHIP_TYPES[0];
+
+  // rawPitch/rawYaw model the control scheme's actual output: full deflection (1) on each
+  // active axis, not a pre-normalized unit vector — integrateFlight itself normalizes the
+  // combined (1,1) diagonal down to the shared RCS budget (see flightModel.ts's inputScale).
+  // This mirrors holding two rotation keys together, e.g. pitch-down + yaw-right.
+  const angles = [
+    { label: '0° (pure pitch)', rawPitch: 1, rawYaw: 0 },
+    { label: '45° (pitch+yaw)', rawPitch: 1, rawYaw: 1 },
+    { label: '90° (pure yaw)', rawPitch: 0, rawYaw: 1 },
+  ];
+
+  const STEP_DT = 0.016;
+
+  // integrateFlight applies drag *after* thrust within the same tick, using the just-updated
+  // angVel — that ordering settles the discrete steady state at input * maxAngVel * (1 - AD*dt/mass),
+  // not the naive continuous fixed point input * maxAngVel (the two only coincide as dt -> 0).
+  // 100 ticks is enough ticks for the exponential approach itself to be fully converged, so this
+  // bias, not residual convergence error, is what a tight tolerance has to account for.
+  function expectedSteadyState(rawInput: number, scale: number, maxAngVel: number, angularDrag: number): number {
+    const bias = 1 - (angularDrag * STEP_DT) / gladius.mass;
+    return rawInput * scale * maxAngVel * bias;
+  }
+
+  it.each(angles)('normal: $label', ({ rawPitch, rawYaw }) => {
+    const body = runToSteadyState(rawPitch, rawYaw, false);
+    const inputMag = Math.hypot(rawPitch, rawYaw);
+    const scale = inputMag > 1 ? 1 / inputMag : 1;
+    const expectedPitch = expectedSteadyState(rawPitch, scale, gladius.maxAngVel.pitch, gladius.angularDrag.pitch);
+    const expectedYaw = expectedSteadyState(rawYaw, scale, gladius.maxAngVel.yaw, gladius.angularDrag.yaw);
+    expect(Math.abs(body.angVel.pitch - expectedPitch)).toBeLessThan(0.005);
+    expect(Math.abs(body.angVel.yaw - expectedYaw)).toBeLessThan(0.005);
+  });
+
+  it.each(angles)('boosted: $label', ({ rawPitch, rawYaw }) => {
+    const body = runToSteadyState(rawPitch, rawYaw, true);
+    const inputMag = Math.hypot(rawPitch, rawYaw);
+    const scale = inputMag > 1 ? 1 / inputMag : 1;
+    // boost reuses the same angularDrag as normal flight — only authority/ceiling change (see shipTypes.ts)
+    const expectedPitch = expectedSteadyState(rawPitch, scale, gladius.boostMaxAngVel.pitch, gladius.angularDrag.pitch);
+    const expectedYaw = expectedSteadyState(rawYaw, scale, gladius.boostMaxAngVel.yaw, gladius.angularDrag.yaw);
+    expect(Math.abs(body.angVel.pitch - expectedPitch)).toBeLessThan(0.005);
+    expect(Math.abs(body.angVel.yaw - expectedYaw)).toBeLessThan(0.005);
+  });
+
+  it('combined rotation-rate magnitude at 45° stays below either single-axis max (shared RCS budget)', () => {
+    const normal = runToSteadyState(1, 1, false);
+    const boosted = runToSteadyState(1, 1, true);
+    const normalMag = Math.hypot(normal.angVel.pitch, normal.angVel.yaw);
+    const boostedMag = Math.hypot(boosted.angVel.pitch, boosted.angVel.yaw);
+    expect(normalMag).toBeLessThan(gladius.maxAngVel.pitch);
+    expect(boostedMag).toBeLessThan(gladius.boostMaxAngVel.pitch);
   });
 });

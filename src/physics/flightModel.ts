@@ -123,40 +123,55 @@ export function integrateFlight(body: FlightBody, input: FlightInputs, dt: numbe
   addScaled(accel, up, verticalThrustMag / t.mass);
 
   if (input.brake) {
-    // Space brake: counter-thrust in whichever direction body is actually moving, using that
-    // axis's own real thrust rating — decompose velocity into the ship's local frame so each axis
-    // brakes against its own thrust rating (main forward-decel vs retro backward-decel differ).
+    // Space brake: each real thruster only pushes along one local axis, and the flight computer
+    // fires all of them together to decelerate along the ship's ACTUAL velocity direction — so
+    // speed shrinks but the direction of travel never changes (unlike counter-thrusting each local
+    // axis independently, which drags the resultant velocity vector off its original heading as
+    // axes with different thrust ratings bleed off at different rates). Combining axes to cancel a
+    // diagonal velocity is usually *weaker* than any single thruster's rating: whichever axis has
+    // the worst thrust-to-required-cancellation ratio (its own accel capacity divided by how much
+    // of the velocity direction it alone has to cancel) sets the ceiling for the whole maneuver —
+    // full brake power only when velocity is purely aligned to one axis.
     const localVel = {
       x: body.vel.x * right.x + body.vel.y * right.y + body.vel.z * right.z,          // lateral
       y: body.vel.x * up.x + body.vel.y * up.y + body.vel.z * up.z,                   // vertical
       z: body.vel.x * forward.x + body.vel.y * forward.y + body.vel.z * forward.z     // longitudinal
     };
-    const longitudinalThrust = localVel.z > 0 ? t.linearThrust.retro : t.linearThrust.main;
-    const brakeVerticalThrust = localVel.y > 0 ? t.linearThrust.verticalDown : t.linearThrust.verticalUp;
+    const speed = Math.hypot(localVel.x, localVel.y, localVel.z);
+    if (speed > 1e-6) {
+      const longitudinalThrust = localVel.z > 0 ? t.linearThrust.retro : t.linearThrust.main;
+      const brakeVerticalThrust = localVel.y > 0 ? t.linearThrust.verticalDown : t.linearThrust.verticalUp;
 
-    const decelerate = (v: number, thrust: number): number => {
-      const maxDelta = (thrust / t.mass) * dt;
-      return Math.abs(v) <= maxDelta ? 0 : v - Math.sign(v) * maxDelta;
-    };
-    localVel.x = decelerate(localVel.x, t.linearThrust.strafe);
-    localVel.y = decelerate(localVel.y, brakeVerticalThrust);
-    localVel.z = decelerate(localVel.z, longitudinalThrust);
+      const unit = { x: localVel.x / speed, y: localVel.y / speed, z: localVel.z / speed };
+      // A unit vector always has at least one component >= 1/sqrt(3) ≈ 0.577, so this always
+      // narrows from Infinity — no axis can be simultaneously negligible on all three.
+      const AXIS_EPS = 1e-4;
+      let maxDecel = Infinity;
+      if (Math.abs(unit.x) > AXIS_EPS) maxDecel = Math.min(maxDecel, (t.linearThrust.strafe / t.mass) / Math.abs(unit.x));
+      if (Math.abs(unit.y) > AXIS_EPS) maxDecel = Math.min(maxDecel, (brakeVerticalThrust / t.mass) / Math.abs(unit.y));
+      if (Math.abs(unit.z) > AXIS_EPS) maxDecel = Math.min(maxDecel, (longitudinalThrust / t.mass) / Math.abs(unit.z));
 
-    body.vel.x = right.x * localVel.x + up.x * localVel.y + forward.x * localVel.z;
-    body.vel.y = right.y * localVel.x + up.y * localVel.y + forward.y * localVel.z;
-    body.vel.z = right.z * localVel.x + up.z * localVel.y + forward.z * localVel.z;
+      const newSpeed = Math.max(0, speed - maxDecel * dt);
+      localVel.x = unit.x * newSpeed;
+      localVel.y = unit.y * newSpeed;
+      localVel.z = unit.z * newSpeed;
+
+      body.vel.x = right.x * localVel.x + up.x * localVel.y + forward.x * localVel.z;
+      body.vel.y = right.y * localVel.x + up.y * localVel.y + forward.y * localVel.z;
+      body.vel.z = right.z * localVel.x + up.z * localVel.y + forward.z * localVel.z;
+    }
   }
 
   body.vel.x += accel.x * dt;
   body.vel.y += accel.y * dt;
   body.vel.z += accel.z * dt;
 
-  // brake's decelerate() above already counter-thrusts at the ship's own max rate for whichever
-  // axis is moving — stacking any of the below on top of that let full brake decelerate harder
-  // than the ship's strongest thruster could ever accelerate it. Skip all of it while actively
-  // braking so total deceleration stays bounded by real thrust, same as normal thrust. Also
-  // skipped entirely in decoupled mode — no auto-damping, so you coast freely on whatever velocity
-  // you have, same as SC's decoupled flight.
+  // the space brake above already counter-thrusts at its own (combined-axis) max rate — stacking
+  // any of the below on top of that let full brake decelerate harder than the ship's combined
+  // thrusters could ever actually produce. Skip all of it while actively braking so total
+  // deceleration stays bounded by real thrust, same as normal thrust. Also skipped entirely in
+  // decoupled mode — no auto-damping, so you coast freely on whatever velocity you have, same as
+  // SC's decoupled flight.
   if (!input.decoupled && !input.brake) {
     if (throttle !== 0 || strafeX !== 0 || strafeY !== 0) {
       // proportional drag while actively thrusting on any linear axis — this is what makes thrust
@@ -169,8 +184,9 @@ export function integrateFlight(body: FlightBody, input: FlightInputs, dt: numbe
     } else {
       // No input at all: real Gladius sheds speed at a flat rate, not a decaying one (measured —
       // see shipTypes.ts), so this can't be the same proportional drag used above (which would
-      // taper off approaching zero). Same bounded-delta shape as the space brake's decelerate()
-      // above, just a much gentler constant — and, like it, clamped so it can't overshoot past zero.
+      // taper off approaching zero). Same direction-preserving bounded-delta shape as the space
+      // brake above, just a much gentler constant — and, like it, clamped so it can't overshoot
+      // past zero.
       const speed = Math.hypot(body.vel.x, body.vel.y, body.vel.z);
       if (speed > 0) {
         const newSpeed = Math.max(0, speed - t.coastDecel * dt);
