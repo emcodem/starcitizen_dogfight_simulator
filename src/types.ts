@@ -240,7 +240,7 @@ export type ActionName =
   | 'strafeForward' | 'strafeBack'
   | 'strafeLeft' | 'strafeRight'
   | 'strafeUp' | 'strafeDown'
-  | 'decoupleToggle' | 'spaceBrake' | 'boost' | 'primaryFire';
+  | 'decoupleToggle' | 'spaceBrake' | 'boost' | 'primaryFire' | 'interact';
 
 export type KeyChord = string[]; // KeyboardEvent.code values, ANDed together
 export type KeyBindings = Record<ActionName, KeyChord[]>;

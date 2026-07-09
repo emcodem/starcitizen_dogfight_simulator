@@ -121,7 +121,7 @@ window.addEventListener('keydown', e => {
 // rising edge: any button not already held at capture start that becomes
 // pressed is the one bound. No direction pairing needed (one action, one button).
 // =====================================================================
-const BUTTON_BINDABLE_ACTIONS: ActionName[] = ['decoupleToggle', 'spaceBrake', 'boost', 'primaryFire'];
+const BUTTON_BINDABLE_ACTIONS: ActionName[] = ['decoupleToggle', 'spaceBrake', 'boost', 'primaryFire', 'interact'];
 let pendingButtonRebindAction: ActionName | null = null;
 let buttonRebindBaseline: Array<{ index: number; buttons: boolean[] }> | null = null;
 let buttonRebindRAF: number | null = null;

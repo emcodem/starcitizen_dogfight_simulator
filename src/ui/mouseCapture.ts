@@ -29,7 +29,9 @@ export function initMouseCapture(): void {
   MouseLook.onChange(captured => {
     hint.style.display = captured ? 'none' : 'block';
     const statusEl = document.getElementById('ctrl-mouse-status');
-    if (statusEl) statusEl.textContent = captured ? 'Captured — Esc or alt-tab to release.' : 'Not captured — click the game view to enable.';
+    if (statusEl) statusEl.textContent = captured
+      ? 'Captured — Esc, alt-tab, or Interact (F) to release.'
+      : 'Not captured — click the game view or press Interact (F) to enable.';
   });
 
   // primary fire itself is polled each physics tick from the configured mouse button

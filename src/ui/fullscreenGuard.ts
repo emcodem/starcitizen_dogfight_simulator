@@ -1,5 +1,6 @@
 import type { Ship } from '../types';
 import { keys, chordJustPressed } from '../input/controlsModule';
+import * as MouseLook from '../input/mouseLook';
 
 // Keyboard Lock API — Chromium-only, experimental, not in lib.dom.d.ts.
 declare global {
@@ -52,6 +53,13 @@ export function initFullscreenGuard(ship: Ship): void {
     keys[e.code] = true;
     if (!e.repeat && chordJustPressed('decoupleToggle', e.code)) {
       ship.decoupled = !ship.decoupled;
+    }
+    // interact is a real toggle too — releases/re-requests pointer lock (same effect as
+    // clicking away / clicking the game view), just via a dedicated key. Unlike Escape,
+    // it's not wired to any panel-close logic.
+    if (!e.repeat && chordJustPressed('interact', e.code)) {
+      if (MouseLook.isCaptured()) MouseLook.releaseCapture();
+      else MouseLook.requestCapture();
     }
     // space brake is hold-to-brake (see physics/step.ts), not a toggle — nothing to do here
 
