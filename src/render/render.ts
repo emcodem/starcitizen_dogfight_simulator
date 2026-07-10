@@ -201,6 +201,129 @@ function drawStation(cam: Camera): void {
   drawWireBox(STATION.pos, { x: h, y: h, z: h }, WORLD_AXES, cam, '#ff4d4d');
 }
 
+// ---------- Distant Mars-like planet — pure backdrop, fixed millions of meters out so its
+// apparent position/size barely shifts across the whole normal play area (a few km at most) —
+// reads as "there, but never reachable" rather than an object you could ever fly to.
+const PLANET_POS: Vec3 = { x: -2500000, y: 900000, z: 4500000 };
+const PLANET_RADIUS = 600000;
+
+// ---------- Distant sun — same kind of fixed backdrop object as the planet, but also acts as a
+// light source: drawPlanet shades its lit side toward this position and casts a shadow on the
+// opposite side, so both the terminator's orientation AND how much of the disc is in shadow
+// reflect where the sun actually is. Positioned off to the +X side and pulled back toward the
+// camera's depth so the angle between "planet->sun" and "planet->camera" is ~40° — a gibbous phase
+// whose anti-sun shadow crescent reads as a modest slice (~1/8 of the disc by area). Note a
+// sphere's terminator always meets the disc edge at the two poles perpendicular to the sun, so the
+// crescent tapers to nothing there; the phase amount is set purely by d = cos(that angle). Move the
+// sun more behind the camera (larger d) for a thinner sliver, more to the side (smaller d) for more.
+const SUN_POS: Vec3 = { x: 7835600, y: 163000, z: 810600 };
+const SUN_RADIUS = 300000;
+
+function drawSun(cam: Camera): void {
+  const p = project(SUN_POS.x, SUN_POS.y, SUN_POS.z, cam);
+  if (!p) return;
+  const r = SUN_RADIUS * p.scale;
+  if (r < 1) return;
+
+  // soft outer glow behind a small solid core, instead of a flat disc, so it reads as a bright
+  // light source rather than another plain planet
+  const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 3);
+  glow.addColorStop(0, 'rgba(255,244,214,0.5)');
+  glow.addColorStop(1, 'rgba(255,244,214,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, r * 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#fff6df';
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawPlanet(cam: Camera): void {
+  const p = project(PLANET_POS.x, PLANET_POS.y, PLANET_POS.z, cam);
+  if (!p) return;
+  const r = PLANET_RADIUS * p.scale;
+  if (r < 1) return;
+
+  // Terminator orientation = the on-screen direction from the planet's center toward the sun.
+  // Rather than projecting the abstract planet->sun direction *vector* through the camera basis
+  // (which quietly assumes both bodies sit at infinity in the same direction — they don't, and
+  // that approximation injected a bogus rotation as you pitched/rolled), project two actual world
+  // points: the planet center, and the sub-solar point on its surface (center + radius toward the
+  // sun). The screen vector between them is the true, perspective-correct lit direction, and since
+  // both points are essentially co-located they always project cleanly whenever the planet itself
+  // is visible — even when the sun is off-screen or behind the camera. This tracks pitch/yaw/roll
+  // exactly because it's just honest projection, no special-casing per axis.
+  const toSun = normalize({
+    x: SUN_POS.x - PLANET_POS.x,
+    y: SUN_POS.y - PLANET_POS.y,
+    z: SUN_POS.z - PLANET_POS.z
+  });
+  const subSolar = project(
+    PLANET_POS.x + toSun.x * PLANET_RADIUS,
+    PLANET_POS.y + toSun.y * PLANET_RADIUS,
+    PLANET_POS.z + toSun.z * PLANET_RADIUS,
+    cam
+  );
+  let lx = 1, ly = 0;
+  if (subSolar) {
+    const vx = subSolar.x - p.x, vy = subSolar.y - p.y;
+    const len = Math.hypot(vx, vy);
+    if (len > 1e-6) { lx = vx / len; ly = vy / len; }
+  }
+
+  // lit-sphere look via a highlight offset toward the sun, fading to a dark limb — same trick
+  // drawRangeBubble uses to fake a solid ball with no real lighting pipeline
+  const gradient = ctx.createRadialGradient(p.x + lx * r * 0.4, p.y + ly * r * 0.4, r * 0.1, p.x, p.y, r);
+  gradient.addColorStop(0, 'rgba(214,148,110,1)');
+  gradient.addColorStop(0.55, 'rgba(178,96,68,1)');
+  gradient.addColorStop(1, 'rgba(90,42,32,1)');
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Night-side shadow with a real phase. How much of the disc we see lit depends on the angle
+  // between "planet -> sun" and "planet -> camera": d = cos(that angle) runs +1 (sun behind us,
+  // full face lit, no shadow) through 0 (sun square to the side, exactly half) to -1 (sun behind
+  // the planet, all shadow), so the shadow covers (1 - d)/2 of the disc. The terminator (day/night
+  // boundary) projects to a half-ellipse whose waist sits d*r off-center along the sun axis — that
+  // curvature is what makes it read as a lit sphere at a gibbous/crescent phase rather than a flat
+  // half cut through the middle. Built in a frame rotated so the sun points along +X (local), then
+  // rotated back by theta so it lines up with the on-screen sun direction (lx, ly).
+  const toCam = normalize({
+    x: cam.pos.x - PLANET_POS.x,
+    y: cam.pos.y - PLANET_POS.y,
+    z: cam.pos.z - PLANET_POS.z
+  });
+  const d = clamp(toSun.x * toCam.x + toSun.y * toCam.y + toSun.z * toCam.z, -1, 1);
+  const theta = Math.atan2(ly, lx);
+  const SEG = 48;
+
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(theta);
+  ctx.beginPath();
+  // terminator half-ellipse: t = pi/2 .. 3pi/2 traces (0,r) -> (-d*r, 0) -> (0,-r)
+  for (let i = 0; i <= SEG; i++) {
+    const t = Math.PI / 2 + (i / SEG) * Math.PI;
+    ctx.lineTo(r * d * Math.cos(t), r * Math.sin(t));
+  }
+  // anti-sun limb: outer circle back from (0,-r) through (-r,0) to (0,r), closing the night lune
+  for (let i = 0; i <= SEG; i++) {
+    const a = -Math.PI / 2 - (i / SEG) * Math.PI;
+    ctx.lineTo(r * Math.cos(a), r * Math.sin(a));
+  }
+  ctx.closePath();
+  // ~0.9 alpha rather than pure black leaves a faint reddish tint on the night side (earthshine-
+  // like) instead of a dead-black bite out of the disc
+  ctx.fillStyle = 'rgba(0,0,0,0.9)';
+  ctx.fill();
+  ctx.restore();
+}
+
 // Shifts a '#rrggbb' color toward white (percent > 0) or black (percent < 0) — used to fake
 // per-panel metal shading on the drone silhouette without any real lighting/material pipeline.
 function shadeHex(hex: string, percent: number): string {
@@ -787,6 +910,11 @@ export function render(
     axes: { forward, right, up }
   };
 
+  // distant backdrop sun + planet — drawn first so stars/grid/ships naturally layer in front of
+  // them; sun first since it's the farther of the two (see SUN_POS/PLANET_POS)
+  drawSun(cam);
+  drawPlanet(cam);
+
   // stars
   ctx.fillStyle = '#3d5a54';
   for (const s of stars) {
@@ -836,10 +964,7 @@ export function render(
     if (p) {
       const r = clamp(p.scale * 1.4, 0.6, 4);
       ctx.globalAlpha = clamp(1 - p.depth / BEACON_FIELD * 0.6, 0.25, 1);
-      ctx.beginPath();
-      ctx.moveTo(p.x - r * 2, p.y); ctx.lineTo(p.x + r * 2, p.y);
-      ctx.moveTo(p.x, p.y - r * 2); ctx.lineTo(p.x, p.y + r * 2);
-      ctx.stroke();
+      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
     }
   }
   ctx.globalAlpha = 1;
