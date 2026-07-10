@@ -2,11 +2,11 @@ import type { Ship } from '../types';
 import { keys } from '../input/controlsModule';
 import { setFiring } from '../world/weapons';
 import { toggleDecoupled } from '../ship/decoupledPersist';
+import { isTouchPrimary } from './deviceDetect';
 
 // ---------- Touch controls (minimal, testing only) ----------
 export function initTouchControls(ship: Ship): void {
-  const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-  if (!isTouch) return;
+  if (!isTouchPrimary()) return;
 
   document.body.classList.add('touch');
 
