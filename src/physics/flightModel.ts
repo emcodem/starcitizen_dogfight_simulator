@@ -58,15 +58,18 @@ export function integrateFlight(body: FlightBody, input: FlightInputs, dt: numbe
   const angularThrust = body.boosting ? t.boostAngularThrust : t.angularThrust;
   const maxAngVel = body.boosting ? t.boostMaxAngVel : t.maxAngVel;
 
-  body.angVel.pitch += (pitchInput * angularThrust.pitch / t.mass) * dt;
-  body.angVel.yaw   += (yawInput   * angularThrust.yaw   / t.mass) * dt;
-  body.angVel.roll  += (rollInput  * angularThrust.roll  / t.mass) * dt;
-
   // angular drag (dampening — simulates RCS auto-dampening like SC's flight computer) — per axis,
-  // since the real ship spins down at a different rate per axis (see shipTypes.ts)
-  body.angVel.pitch -= (body.angVel.pitch * t.angularDrag.pitch / t.mass) * dt;
-  body.angVel.yaw   -= (body.angVel.yaw   * t.angularDrag.yaw   / t.mass) * dt;
-  body.angVel.roll  -= (body.angVel.roll  * t.angularDrag.roll  / t.mass) * dt;
+  // since the real ship spins down at a different rate per axis (see shipTypes.ts). Drag is
+  // computed from the angVel this tick STARTED with, not the value after thrust is added — doing
+  // it the other order (thrust first, drag off the already-updated value) biases the discrete
+  // steady state to maxAngVel*(1 - angularDrag/mass*dt) instead of maxAngVel itself, permanently
+  // short of the ceiling by an amount that depends on frame rate (was ~11% low at 60fps for pitch)
+  // — the angularThrust == maxAngVel * angularDrag invariant (shipTypes.ts) assumes the continuous
+  // fixed point, so full input should actually reach maxAngVel regardless of frame rate.
+  const prevAngVel = { pitch: body.angVel.pitch, yaw: body.angVel.yaw, roll: body.angVel.roll };
+  body.angVel.pitch += (pitchInput * angularThrust.pitch / t.mass) * dt - (prevAngVel.pitch * t.angularDrag.pitch / t.mass) * dt;
+  body.angVel.yaw   += (yawInput   * angularThrust.yaw   / t.mass) * dt - (prevAngVel.yaw   * t.angularDrag.yaw   / t.mass) * dt;
+  body.angVel.roll  += (rollInput  * angularThrust.roll  / t.mass) * dt - (prevAngVel.roll  * t.angularDrag.roll  / t.mass) * dt;
 
   // This drag is proportional (exponential decay), so on release it only asymptotically
   // approaches zero and never actually arrives — the real ship's RCS reads as stopping a little

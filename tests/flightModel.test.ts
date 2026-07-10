@@ -167,24 +167,19 @@ describe('integrateFlight — pitch/yaw angle sweep (0°/45°/90°, normal & boo
     { label: '90° (pure yaw)', rawPitch: 0, rawYaw: 1 },
   ];
 
-  const STEP_DT = 0.016;
-
-  // integrateFlight applies drag *after* thrust within the same tick, using the just-updated
-  // angVel — that ordering settles the discrete steady state at input * maxAngVel * (1 - AD*dt/mass),
-  // not the naive continuous fixed point input * maxAngVel (the two only coincide as dt -> 0).
-  // 100 ticks is enough ticks for the exponential approach itself to be fully converged, so this
-  // bias, not residual convergence error, is what a tight tolerance has to account for.
-  function expectedSteadyState(rawInput: number, scale: number, maxAngVel: number, angularDrag: number): number {
-    const bias = 1 - (angularDrag * STEP_DT) / gladius.mass;
-    return rawInput * scale * maxAngVel * bias;
+  // integrateFlight computes drag from the angVel each tick STARTED with, so full sustained
+  // input converges to the continuous fixed point input * maxAngVel regardless of frame rate —
+  // 100 ticks is comfortably enough for the exponential approach to fully converge.
+  function expectedSteadyState(rawInput: number, scale: number, maxAngVel: number): number {
+    return rawInput * scale * maxAngVel;
   }
 
   it.each(angles)('normal: $label', ({ rawPitch, rawYaw }) => {
     const body = runToSteadyState(rawPitch, rawYaw, false);
     const inputMag = Math.hypot(rawPitch, rawYaw);
     const scale = inputMag > 1 ? 1 / inputMag : 1;
-    const expectedPitch = expectedSteadyState(rawPitch, scale, gladius.maxAngVel.pitch, gladius.angularDrag.pitch);
-    const expectedYaw = expectedSteadyState(rawYaw, scale, gladius.maxAngVel.yaw, gladius.angularDrag.yaw);
+    const expectedPitch = expectedSteadyState(rawPitch, scale, gladius.maxAngVel.pitch);
+    const expectedYaw = expectedSteadyState(rawYaw, scale, gladius.maxAngVel.yaw);
     expect(Math.abs(body.angVel.pitch - expectedPitch)).toBeLessThan(0.005);
     expect(Math.abs(body.angVel.yaw - expectedYaw)).toBeLessThan(0.005);
   });
@@ -194,8 +189,8 @@ describe('integrateFlight — pitch/yaw angle sweep (0°/45°/90°, normal & boo
     const inputMag = Math.hypot(rawPitch, rawYaw);
     const scale = inputMag > 1 ? 1 / inputMag : 1;
     // boost reuses the same angularDrag as normal flight — only authority/ceiling change (see shipTypes.ts)
-    const expectedPitch = expectedSteadyState(rawPitch, scale, gladius.boostMaxAngVel.pitch, gladius.angularDrag.pitch);
-    const expectedYaw = expectedSteadyState(rawYaw, scale, gladius.boostMaxAngVel.yaw, gladius.angularDrag.yaw);
+    const expectedPitch = expectedSteadyState(rawPitch, scale, gladius.boostMaxAngVel.pitch);
+    const expectedYaw = expectedSteadyState(rawYaw, scale, gladius.boostMaxAngVel.yaw);
     expect(Math.abs(body.angVel.pitch - expectedPitch)).toBeLessThan(0.005);
     expect(Math.abs(body.angVel.yaw - expectedYaw)).toBeLessThan(0.005);
   });
