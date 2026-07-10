@@ -1,5 +1,6 @@
 import * as MouseLook from '../input/mouseLook';
 import { onConfigApplied } from '../input/configRegistry';
+import { isTouchPrimary } from './deviceDetect';
 
 function syncMouseSettingsUI(): void {
   const sensSlider = document.getElementById('ctrl-mouse-sens') as HTMLInputElement | null;
@@ -19,8 +20,7 @@ onConfigApplied(syncMouseSettingsUI);
 export function initMouseCapture(): void {
   const hint = document.getElementById('mouse-capture-hint') as HTMLElement;
   const canvas = document.getElementById('c') as HTMLCanvasElement;
-  const noMouse = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-  if (noMouse) return; // touch devices use the on-screen joystick instead
+  if (isTouchPrimary()) return; // touch devices use the on-screen joystick instead
 
   hint.addEventListener('click', () => MouseLook.requestCapture());
   canvas.addEventListener('click', () => {
