@@ -755,6 +755,12 @@ function updateHUD(
   boostEl.className = ship.boosting ? 'value on' : 'value';
   (document.getElementById('bar-boost') as HTMLElement).style.width = boostPct + '%';
   document.getElementById('s-speed')!.textContent = speed.toFixed(1) + ' m/s';
+  const yawRateDeg = ship.angVel.yaw * (180 / Math.PI);
+  const pitchRateDeg = ship.angVel.pitch * (180 / Math.PI);
+  const turnRateDeg = Math.hypot(yawRateDeg, pitchRateDeg); // combined nose-turn rate — roll doesn't move the boresight, so it's excluded
+  document.getElementById('s-yawrate')!.textContent = yawRateDeg.toFixed(1) + '°/s';
+  document.getElementById('s-pitchrate')!.textContent = pitchRateDeg.toFixed(1) + '°/s';
+  document.getElementById('s-turnrate')!.textContent = turnRateDeg.toFixed(1) + '°/s';
   const decoupledEl = document.getElementById('s-decoupled')!;
   decoupledEl.textContent = ship.decoupled ? 'ON' : 'OFF';
   decoupledEl.className = ship.decoupled ? 'value on' : 'value';
