@@ -162,6 +162,7 @@
     </div>
     <label>Devices found in your actionmaps.xml</label>
     <div id="ctrl-sc-devices-list" class="ctrl-list">(load actionmaps.xml above)</div>
+    <div class="ctrl-status ctrl-missing" id="ctrl-vjoy-chrome-warning" style="display:none"></div>
     <details class="ctrl-collapsible" open>
       <summary>Devices the browser currently sees</summary>
       <div id="ctrl-gamepad-list" class="ctrl-list">(none yet — press a button on each device)</div>
@@ -169,10 +170,12 @@
     <button type="button" id="ctrl-vjoy-info-btn">Using vJoy? Read this</button>
     <div class="ctrl-status" id="ctrl-vjoy-info" style="display:none">
       <b>vJoy (virtual joystick) support:</b><br>
-      • <b>Firefox:</b> works. Note that each vJoy device only appears in the list above
+      • <b>Chrome / Edge — important:</b> if vJoy is installed, Chromium <b>fails to detect your real
+      devices at all</b> (not just vJoy — your physical stick won't appear either), and vJoy's own axes
+      read as zero. To use a real stick in Chrome you must <b>uninstall or disable vJoy</b>. Otherwise use
+      <b>Firefox</b>, which is unaffected.<br>
+      • <b>Firefox:</b> works, including vJoy. Note that each vJoy device only appears in the list above
       <i>after</i> you move one of its axes or press one of its buttons — the browser hides it until then.<br>
-      • <b>Chrome / Edge:</b> vJoy axis input is <b>not</b> reported (a Chromium limitation — axes read
-      as zero even while they move). Use <b>Firefox</b> if you rely on vJoy axes.<br>
       • To bind two vJoy devices to different controls, give each a <i>different</i> number of axes/buttons
       in the vJoy config — that's how they're told apart (they share one USB vendor/product ID).
     </div>

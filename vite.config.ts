@@ -11,7 +11,12 @@ export default defineConfig({
   server: {
     // bind to 0.0.0.0 so `npm run dev` is reachable from other devices on the LAN
     // (e.g. a phone at http://<this-pc-ip>:5173/) for real touchscreen/multitouch testing
-    host: true
+    host: true,
+    // pin the port: strictPort makes Vite fail loudly if 5173 is taken instead of silently
+    // hopping to 5174 — so the URL is always the same (matters for the gamepad secure-origin
+    // check, saved bookmarks, and the verify skill's automation which assumes 5173)
+    port: 5173,
+    strictPort: true
   },
   build: {
     outDir: 'dist'
