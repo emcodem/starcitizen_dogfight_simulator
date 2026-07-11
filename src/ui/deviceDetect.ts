@@ -7,3 +7,13 @@
 export function isTouchPrimary(): boolean {
   return window.matchMedia('(pointer: coarse) and (hover: none)').matches;
 }
+
+export function isFirefox(): boolean {
+  return navigator.userAgent.includes('Firefox');
+}
+
+// Chromium-based (Chrome, Edge, Brave, …). Used to warn about vJoy: Chromium doesn't report
+// vJoy axis input (it reads zero), whereas Firefox reads it fine — see joystickDetectionUI.
+export function isChromium(): boolean {
+  return /Chrome|Chromium|Edg/.test(navigator.userAgent) && !isFirefox();
+}

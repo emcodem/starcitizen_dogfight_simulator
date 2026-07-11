@@ -40,7 +40,6 @@ canvas { display: block; background: var(--bg); }
 }
 #mode-flag:hover .value { border-color: var(--accent); color: var(--accent); }
 #mode-flag .value.on { border-color: var(--accent); background: rgba(255,122,69,0.12); }
-#reticle-label { bottom: 16px; right: 16px; text-align: right; color: var(--hud-dim); }
 #scenario-hud { top: 16px; left: 50%; transform: translateX(-50%); text-align: center; min-width: 200px; }
 #pip-trainer-hud { top: 16px; left: 50%; transform: translateX(-50%); text-align: center; min-width: 200px; }
 
@@ -153,7 +152,6 @@ body.touch #stats .bar-bg { height: 3px; margin-top: 1px; }
 body.touch #stats br { display: none; }
 body.touch .stat-hide-touch { display: none; } /* BRAKE/MASS/SHIP — low value on a phone */
 body.touch #title { display: none; }
-body.touch #reticle-label { display: none; } /* would sit under the FIRE button; scenario HUD covers targeting */
 
 /* floating dynamic thumbstick — hidden until a thumb spawns it; JS sets left/top */
 .joy-zone {
@@ -249,6 +247,7 @@ body.touch #ctrl-toggle { top: 34px; bottom: auto; right: 8px; }
 #ctrl-panel .ctrl-list { font-size: 11px; line-height: 1.6; max-height: 160px; overflow-y: auto; }
 #ctrl-panel .ctrl-found { color: var(--hud); }
 #ctrl-panel .ctrl-missing { color: var(--hud-dim-light); }
+#ctrl-panel .ctrl-vjoy-warn { color: var(--danger); cursor: help; }
 
 #ctrl-bindings-list.ctrl-list { max-height: none; overflow: visible; }
 

@@ -82,8 +82,6 @@
     <div style="color:var(--danger)" id="ctrl-danger-hint">Ctrl is disabled until you enter fullscreen (prevents accidental Ctrl+W/Q)</div>
     <div id="fullscreen-hint" style="cursor:pointer; color:var(--accent); pointer-events:auto">⛶ Enter fullscreen to protect Ctrl+W/Q (Chrome/Edge only)</div>
   </div>
-
-  <div class="panel" id="reticle-label">manual flight · no target</div>
 </div>
 
 <div id="crosshair"></div>
@@ -168,6 +166,16 @@
       <summary>Devices the browser currently sees</summary>
       <div id="ctrl-gamepad-list" class="ctrl-list">(none yet — press a button on each device)</div>
     </details>
+    <button type="button" id="ctrl-vjoy-info-btn">Using vJoy? Read this</button>
+    <div class="ctrl-status" id="ctrl-vjoy-info" style="display:none">
+      <b>vJoy (virtual joystick) support:</b><br>
+      • <b>Firefox:</b> works. Note that each vJoy device only appears in the list above
+      <i>after</i> you move one of its axes or press one of its buttons — the browser hides it until then.<br>
+      • <b>Chrome / Edge:</b> vJoy axis input is <b>not</b> reported (a Chromium limitation — axes read
+      as zero even while they move). Use <b>Firefox</b> if you rely on vJoy axes.<br>
+      • To bind two vJoy devices to different controls, give each a <i>different</i> number of axes/buttons
+      in the vJoy config — that's how they're told apart (they share one USB vendor/product ID).
+    </div>
     <div class="ctrl-status" id="ctrl-gamepad-support-status"></div>
 
     <label style="margin-top:8px">Resolved analog axes (live)</label>

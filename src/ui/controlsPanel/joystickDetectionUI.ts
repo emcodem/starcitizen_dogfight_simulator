@@ -1,12 +1,20 @@
-import type { AxisConcept } from '../../types';
+import type { AxisConcept, GamepadSnapshot } from '../../types';
 import * as GamepadModule from '../../input/gamepadModule';
 import * as JoystickAxes from '../../input/joystickAxes';
 import { getScDevices, getAxisMap } from '../../input/deviceState';
+import { isChromium } from '../deviceDetect';
 
 const panel = document.getElementById('ctrl-panel') as HTMLElement;
 const scDevicesList = document.getElementById('ctrl-sc-devices-list') as HTMLElement;
 const gamepadList = document.getElementById('ctrl-gamepad-list') as HTMLElement;
 const gamepadSupportStatus = document.getElementById('ctrl-gamepad-support-status') as HTMLElement;
+
+// vJoy shares one USB vendor/product ID (1234:BEAD) across all its virtual devices; the id string
+// also contains "vJoy". Chromium doesn't report vJoy axis input, so we flag each detected vJoy.
+const CHROMIUM = isChromium();
+function isVjoy(p: GamepadSnapshot): boolean {
+  return (p.vid === '1234' && p.pid === 'BEAD') || /vjoy/i.test(p.id);
+}
 
 function renderAxisMap(): void {
   const axisMapEl = document.getElementById('ctrl-axis-map-list') as HTMLElement;
@@ -53,7 +61,11 @@ export function renderGamepads(): void {
       // indices are currently pressed (so a user can identify a button by pressing it).
       const pressed = p.buttonsPressed.reduce<number[]>((acc, isDown, i) => (isDown && acc.push(i), acc), []);
       const buttonsStr = `count ${p.buttonsPressed.length}, pressed: [${pressed.join(', ')}]`;
-      return `<div class="ctrl-found">#${p.index}: ${p.id}` +
+      // On Chromium, vJoy axes read as zero — flag each detected vJoy with a hover-tooltip warning.
+      const warn = (CHROMIUM && isVjoy(p))
+        ? `<span class="ctrl-vjoy-warn" title="vJoy only works in Firefox — Chrome/Edge does not report vJoy axis input.">⚠</span> `
+        : '';
+      return `<div class="ctrl-found">${warn}#${p.index}: ${p.id}` +
         (p.vid ? ` — VID ${p.vid} PID ${p.pid}` : '') +
         `<br>&nbsp;&nbsp;axes: ${axesStr}` +
         `<br>&nbsp;&nbsp;buttons: ${buttonsStr}</div>`;
@@ -64,6 +76,12 @@ export function renderGamepads(): void {
 }
 
 export function initJoystickDetectionUI(): void {
+  const vjoyInfoBtn = document.getElementById('ctrl-vjoy-info-btn') as HTMLButtonElement;
+  const vjoyInfo = document.getElementById('ctrl-vjoy-info') as HTMLElement;
+  vjoyInfoBtn.addEventListener('click', () => {
+    vjoyInfo.style.display = vjoyInfo.style.display === 'none' ? 'block' : 'none';
+  });
+
   if (!GamepadModule.isSupported()) {
     gamepadSupportStatus.textContent = 'This browser does not expose the Gamepad API.';
     return;
