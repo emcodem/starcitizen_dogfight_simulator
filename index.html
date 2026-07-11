@@ -90,17 +90,20 @@
 <div id="ctrl-flash-warning">⚠ Ctrl is disabled — enter fullscreen to use it</div>
 
 <div id="touch-controls">
-  <div id="joy-zone"><div id="joy-stick"></div></div>
-  <div id="touch-buttons">
+  <!-- left stick: lateral/vertical strafe · right stick: pitch/yaw · roll via device gyro -->
+  <div id="joy-zone" class="joy-zone"><div class="joy-stick"></div><span class="joy-label">STRAFE</span></div>
+  <div id="joy-zone-right" class="joy-zone"><div class="joy-stick"></div><span class="joy-label">PITCH / YAW</span></div>
+  <div id="touch-buttons-left">
     <button id="tb-fwd">FWD</button>
     <button id="tb-back">BACK</button>
-    <button id="tb-up">UP</button>
-    <button id="tb-down">DOWN</button>
-    <button id="tb-roll-l">ROLL◀</button>
-    <button id="tb-roll-r">ROLL▶</button>
+  </div>
+  <div id="touch-buttons-center">
     <button id="tb-decouple">DE-CPL</button>
     <button id="tb-stop">STOP</button>
-    <button id="tb-fire" style="grid-column: span 4; background: rgba(255,77,77,0.12); border-color: var(--danger); color: var(--danger);">FIRE</button>
+    <button id="tb-gyro" hidden>ROLL: GYRO</button>
+  </div>
+  <div id="touch-buttons-right">
+    <button id="tb-fire">FIRE</button>
   </div>
 </div>
 

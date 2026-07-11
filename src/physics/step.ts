@@ -6,6 +6,7 @@ import * as ControlsModule from '../input/controlsModule';
 import * as GamepadModule from '../input/gamepadModule';
 import * as JoystickAxes from '../input/joystickAxes';
 import * as JoystickButtons from '../input/joystickButtons';
+import * as TouchInput from '../input/touchInput';
 import * as MouseButtons from '../input/mouseButtons';
 import * as MouseLook from '../input/mouseLook';
 import { STATION, isStationActive } from '../world/station';
@@ -36,6 +37,8 @@ export function step(
   // open — since actual flight needs current-frame axis data, not a 100ms-stale sample
   GamepadModule.poll();
   const stick = JoystickAxes.read();
+  // on-screen touch sticks + device-gyro roll — analog, summed additively like the joystick
+  const touch = TouchInput.read();
 
   // decouple is a real toggle (edge-detected, fires once per press); space brake and boost are
   // hold-based, not toggles — active for exactly as long as the key/button is held. Mouse buttons
@@ -83,6 +86,11 @@ export function step(
   if (stick.yaw !== null) yawInput += stick.yaw;
   if (stick.roll !== null) rollInput += stick.roll;
 
+  // on-screen right stick (pitch/yaw) + device-gyro roll — additive, same as the joystick
+  pitchInput += touch.pitch;
+  yawInput += touch.yaw;
+  rollInput += touch.roll;
+
   // mouse look adds smoothly on top of any keyboard/joystick input
   pitchInput += mouseInput.pitch;
   yawInput += mouseInput.yaw;
@@ -124,6 +132,9 @@ export function step(
   // additive with keyboard, same reasoning as pitch/yaw/roll/throttle above
   if (stick.lateral !== null) strafeInput.x += stick.lateral;
   if (stick.vertical !== null) strafeInput.y += stick.vertical;
+  // on-screen left stick — lateral/vertical strafe, additive with the above
+  strafeInput.x += touch.strafeX;
+  strafeInput.y += touch.strafeY;
 
   integrateFlight(ship, {
     throttle: ship.throttle,
