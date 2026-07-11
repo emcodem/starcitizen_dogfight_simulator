@@ -68,6 +68,7 @@ export function step(
   if (ControlsModule.isActive('strafeForward')) throttleInput += 1;
   if (ControlsModule.isActive('strafeBack')) throttleInput -= 1;
   if (stick.longitudinal !== null) throttleInput += stick.longitudinal;
+  throttleInput += touch.throttle; // gyro forward/back tilt (0 unless the gyro toggle is on)
   ship.throttle = clamp(throttleInput, -1, 1);
 
   // --- Angular input (rotation thrusters) ---

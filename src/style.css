@@ -63,7 +63,7 @@ canvas { display: block; background: var(--bg); }
   z-index: 20;
 }
 #scenario-menu-toggle:hover { border-color: var(--accent); color: var(--accent); }
-body.touch #scenario-menu-toggle { top: auto; bottom: 240px; right: 336px; }
+body.touch #scenario-menu-toggle { top: 8px; bottom: auto; right: 8px; }
 
 #fullscreen-toggle {
   position: fixed; top: 16px; right: 16px;
@@ -71,14 +71,14 @@ body.touch #scenario-menu-toggle { top: auto; bottom: 240px; right: 336px; }
 }
 #fullscreen-toggle:hover { border-color: var(--accent); color: var(--accent); }
 #fullscreen-toggle.on { border-color: var(--hud); color: var(--hud); }
-body.touch #fullscreen-toggle { top: auto; bottom: 240px; right: 496px; }
+body.touch #fullscreen-toggle { top: 34px; bottom: auto; right: 98px; }
 
 #restart-toggle {
   position: fixed; top: 16px; right: 176px;
   z-index: 20;
 }
 #restart-toggle:hover { border-color: var(--accent); color: var(--accent); }
-body.touch #restart-toggle { top: auto; bottom: 240px; right: 176px; }
+body.touch #restart-toggle { top: 8px; bottom: auto; right: 98px; }
 
 .menu-link-btn {
   display: inline-block;
@@ -137,16 +137,34 @@ body.touch #crosshair { display: none; }
 body.touch #touch-controls { display: block; }
 body.touch #controls { display: none; }
 
+/* --- touch/landscape HUD trims: everything's smaller than the desktop layout --- */
+/* the F1–F4 toggles form a compact 2×2 grid in the top-right corner (positions above) */
+body.touch #scenario-menu-toggle,
+body.touch #fullscreen-toggle,
+body.touch #restart-toggle,
+body.touch #ctrl-toggle {
+  width: 84px; height: 22px; font-size: 9px; letter-spacing: 0; z-index: 20;
+}
+/* the stats readout is reference info, not a control — shrink it hard on a phone */
+body.touch #stats {
+  top: 8px; left: 8px; min-width: 0; padding: 5px 8px; font-size: 9px; line-height: 1.3;
+}
+body.touch #stats .bar-bg { height: 3px; margin-top: 1px; }
+body.touch #stats br { display: none; }
+body.touch .stat-hide-touch { display: none; } /* BRAKE/MASS/SHIP — low value on a phone */
+body.touch #title { display: none; }
+body.touch #reticle-label { display: none; } /* would sit under the FIRE button; scenario HUD covers targeting */
+
+/* floating dynamic thumbstick — hidden until a thumb spawns it; JS sets left/top */
 .joy-zone {
-  position: fixed; bottom: 20px;
+  position: fixed; display: none;
   width: 130px; height: 130px;
   border: 1px solid var(--hud-dim);
   border-radius: 50%;
   background: rgba(255,255,255,0.03);
-  touch-action: none;
+  touch-action: none; pointer-events: none; z-index: 5;
 }
-#joy-zone { left: 20px; }
-#joy-zone-right { right: 20px; }
+.joy-zone.active { display: block; }
 .joy-stick {
   position: absolute; left: 45px; top: 45px;
   width: 40px; height: 40px;
@@ -155,22 +173,26 @@ body.touch #controls { display: none; }
   border: 1px solid var(--hud);
   pointer-events: none;
 }
-.joy-label {
-  position: absolute; left: 0; right: 0; bottom: -18px; text-align: center;
-  color: var(--hud-dim); font-family: var(--font-mono); font-size: 9px; letter-spacing: 1px;
-  pointer-events: none;
+/* always-on hint of which half does what — pinned to the side edges, mid-height, clear of
+   every button; the sticks themselves are invisible until a thumb spawns them */
+.touch-hint {
+  position: fixed; top: 50%; transform: translateY(-50%);
+  color: var(--hud-dim); font-family: var(--font-mono); font-size: 10px; letter-spacing: 1px;
+  pointer-events: none; opacity: 0.4; z-index: 4;
 }
+#touch-hint-left { left: 12px; }
+#touch-hint-right { right: 12px; }
 
 #touch-buttons-left, #touch-buttons-right, #touch-buttons-center {
   position: fixed; display: flex; gap: 8px; touch-action: none;
 }
-/* throttle above the left (strafe) stick, fire above the right (aim) stick */
-#touch-buttons-left { left: 20px; bottom: 168px; flex-direction: column; }
-#touch-buttons-right { right: 20px; bottom: 168px; flex-direction: column; }
-/* utility buttons centered along the bottom, between the two sticks */
+/* action buttons live in the three bottom zones (corners + center) so the open middle of
+   each screen half stays free for the dynamic stick to spawn under the thumb */
+#touch-buttons-left { left: 14px; bottom: 14px; flex-direction: row; }
+#touch-buttons-right { right: 14px; bottom: 14px; flex-direction: row; }
 #touch-buttons-center {
-  left: 50%; bottom: 20px; transform: translateX(-50%);
-  flex-direction: row; flex-wrap: wrap; justify-content: center; max-width: 200px;
+  left: 50%; bottom: 14px; transform: translateX(-50%);
+  flex-direction: row; flex-wrap: wrap; justify-content: center; max-width: 220px;
 }
 #touch-controls button {
   min-width: 62px; height: 44px; padding: 0 10px;
@@ -191,7 +213,7 @@ body.touch #controls { display: none; }
   z-index: 20;
 }
 #ctrl-toggle:hover { border-color: var(--accent); color: var(--accent); }
-body.touch #ctrl-toggle { top: auto; bottom: 240px; right: 16px; }
+body.touch #ctrl-toggle { top: 34px; bottom: auto; right: 8px; }
 
 #ctrl-panel {
   position: fixed; top: 60px; right: 16px;

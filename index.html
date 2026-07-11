@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Vector — Flight Practice Sandbox</title>
 <style>html,body{background:#05070a;margin:0}</style>
 </head>
@@ -72,9 +73,9 @@
     <div class="row"><span class="label">PITCH RATE</span><span class="value" id="s-pitchrate">0°/s</span></div>
     <div class="row"><span class="label">TURN RATE</span><span class="value" id="s-turnrate">0°/s</span></div>
     <div class="row" id="mode-flag"><span class="label">DECOUPLED</span><span class="value" id="s-decoupled">OFF</span></div>
-    <div class="row"><span class="label">BRAKE</span><span class="value" id="s-brake">OFF</span></div>
-    <div class="row"><span class="label">MASS</span><span class="value" id="s-mass">0</span></div>
-    <div class="row"><span class="label">SHIP</span><span class="value" id="s-ship">Gladius</span></div>
+    <div class="row stat-hide-touch"><span class="label">BRAKE</span><span class="value" id="s-brake">OFF</span></div>
+    <div class="row stat-hide-touch"><span class="label">MASS</span><span class="value" id="s-mass">0</span></div>
+    <div class="row stat-hide-touch"><span class="label">SHIP</span><span class="value" id="s-ship">Gladius</span></div>
   </div>
 
   <div class="panel" id="controls">
@@ -90,9 +91,12 @@
 <div id="ctrl-flash-warning">⚠ Ctrl is disabled — enter fullscreen to use it</div>
 
 <div id="touch-controls">
-  <!-- left stick: lateral/vertical strafe · right stick: pitch/yaw · roll via device gyro -->
-  <div id="joy-zone" class="joy-zone"><div class="joy-stick"></div><span class="joy-label">STRAFE</span></div>
-  <div id="joy-zone-right" class="joy-zone"><div class="joy-stick"></div><span class="joy-label">PITCH / YAW</span></div>
+  <!-- dynamic thumbsticks: left half = lateral strafe + fwd/back throttle · right half = pitch/yaw · roll+pitch via gyro.
+       The stick rings are floated to the thumb's touch-down point by touchControls.ts. -->
+  <div id="joy-zone" class="joy-zone"><div class="joy-stick"></div></div>
+  <div id="joy-zone-right" class="joy-zone"><div class="joy-stick"></div></div>
+  <div id="touch-hint-left" class="touch-hint">◀ MOVE</div>
+  <div id="touch-hint-right" class="touch-hint">PITCH / YAW ▶</div>
   <div id="touch-buttons-left">
     <button id="tb-fwd">FWD</button>
     <button id="tb-back">BACK</button>
@@ -100,7 +104,7 @@
   <div id="touch-buttons-center">
     <button id="tb-decouple">DE-CPL</button>
     <button id="tb-stop">STOP</button>
-    <button id="tb-gyro" hidden>ROLL: GYRO</button>
+    <button id="tb-gyro" hidden>GYRO</button>
   </div>
   <div id="touch-buttons-right">
     <button id="tb-fire">FIRE</button>

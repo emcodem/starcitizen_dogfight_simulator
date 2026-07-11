@@ -6,22 +6,22 @@ import { clamp } from '../math/vec';
 import * as TouchInput from '../input/touchInput';
 import { isTouchPrimary } from './deviceDetect';
 
-// ---------- Touch controls: twin analog sticks + minimal buttons ----------
-// Left stick  -> lateral/vertical strafe (translation)
-// Right stick -> pitch / yaw (aim)
-// Roll        -> device gyro, opt-in via the ROLL: GYRO toggle
-// FWD/BACK/STOP/FIRE stay as hold buttons; DE-CPL is a press toggle.
-// All axis output goes through TouchInput (analog), which physics/step.ts sums
-// additively alongside keyboard/mouse/joystick — see input/touchInput.ts.
+// ---------- Touch controls: dynamic dual thumbsticks + minimal buttons ----------
+// The screen is split down the middle: a touch that lands anywhere in the LEFT half
+// spawns the strafe stick under that thumb, the RIGHT half spawns the pitch/yaw stick.
+// Each stick's center is wherever the thumb first touched down, so there's no fixed
+// position to reach for (recomputed every touch, so device rotation just works — we
+// read window.innerWidth live). Touches that land on an actual control (a button, the
+// menu, a panel) are left alone so those keep working.
+// The opt-in GYRO toggle adds device-tilt flight: bank -> roll, forward/back tilt -> pitch.
+// All axis output goes through TouchInput (analog), which physics/step.ts sums additively
+// alongside keyboard/mouse/joystick.
 export function initTouchControls(ship: Ship): void {
   if (!isTouchPrimary()) return;
 
   document.body.classList.add('touch');
 
-  // Left stick: x = strafe right(+)/left(-), y (screen-up) = strafe up(+)/down(-).
-  makeAnalogStick('joy-zone', (nx, ny) => TouchInput.setStrafe(nx, -ny));
-  // Right stick: screen-up y = pitch up (matches keyboard pitchUp = -1), x = yaw right(+).
-  makeAnalogStick('joy-zone-right', (nx, ny) => TouchInput.setAim(ny, nx));
+  initDynamicSticks();
 
   function bindHold(id: string, keyCode: string): void {
     const el = document.getElementById(id) as HTMLElement;
@@ -46,19 +46,20 @@ export function initTouchControls(ship: Ship): void {
   initGyroRoll();
 }
 
-// An on-screen analog stick living inside a `.joy-zone` element that holds a `.joy-stick` knob.
-// Reports its deflection as (nx, ny) in [-1,1], screen-space (x right, y down), with a radial
-// deadzone. Each stick tracks its own touch identifier so both sticks work simultaneously
-// (touchmove/touchend for a touch fire on the element the touch STARTED on, so per-zone
-// listeners never cross-talk).
-function makeAnalogStick(zoneId: string, onChange: (nx: number, ny: number) => void): void {
+// A stick that materializes at a touch-down point. `.begin()` pins its center to the
+// thumb and reveals the ring; `.move()` reports deflection relative to that center;
+// `.end()` hides it and zeros the axis. Screen-space output (x right, y down), [-1,1],
+// with a radial deadzone.
+function makeFloatingStick(zoneId: string, onChange: (nx: number, ny: number) => void) {
   const zone = document.getElementById(zoneId) as HTMLElement;
   const knob = zone.querySelector('.joy-stick') as HTMLElement;
-  const RADIUS = 45;     // px the knob can travel from center (keeps the 40px knob inside the 130px zone)
-  const BASE = 45;       // knob's centered left/top offset within the zone
-  const DEADZONE = 0.15; // ignore tiny jitter near center, then rescale so travel still spans full range
+  const SIZE = 130;      // ring diameter (matches CSS) — used to center the ring on the thumb
+  const RADIUS = 50;     // px of thumb travel from center for full deflection
+  const BASE = 45;       // knob's centered offset within the ring ((130-40)/2)
+  const DEADZONE = 0.15;
+
   let activeId: number | null = null;
-  let center = { x: 0, y: 0 };
+  let origin = { x: 0, y: 0 };
 
   function apply(dx: number, dy: number): void {
     const dist = Math.min(RADIUS, Math.hypot(dx, dy));
@@ -76,64 +77,128 @@ function makeAnalogStick(zoneId: string, onChange: (nx: number, ny: number) => v
     }
     onChange(nx, ny);
   }
-  function reset(): void {
-    knob.style.left = BASE + 'px';
-    knob.style.top = BASE + 'px';
-    onChange(0, 0);
-  }
 
-  zone.addEventListener('touchstart', e => {
-    if (activeId !== null) return; // already tracking a touch on this stick
-    const t = e.changedTouches[0];
-    activeId = t.identifier;
-    const rect = zone.getBoundingClientRect();
-    center = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-    apply(t.clientX - center.x, t.clientY - center.y);
-    e.preventDefault();
-  });
-  zone.addEventListener('touchmove', e => {
-    for (const t of Array.from(e.changedTouches)) {
-      if (t.identifier !== activeId) continue;
-      apply(t.clientX - center.x, t.clientY - center.y);
-      e.preventDefault();
-    }
-  });
-  function end(e: TouchEvent): void {
-    for (const t of Array.from(e.changedTouches)) {
-      if (t.identifier !== activeId) continue;
+  return {
+    get activeId() { return activeId; },
+    begin(id: number, x: number, y: number): void {
+      activeId = id;
+      origin = { x, y };
+      zone.style.left = (x - SIZE / 2) + 'px';
+      zone.style.top = (y - SIZE / 2) + 'px';
+      zone.classList.add('active');
+      apply(0, 0);
+    },
+    move(x: number, y: number): void {
+      apply(x - origin.x, y - origin.y);
+    },
+    end(): void {
       activeId = null;
-      reset();
+      zone.classList.remove('active');
+      knob.style.left = BASE + 'px';
+      knob.style.top = BASE + 'px';
+      onChange(0, 0);
     }
-  }
-  zone.addEventListener('touchend', end);
-  zone.addEventListener('touchcancel', end);
+  };
 }
 
-// Device-gyro roll (opt-in). Uses DeviceMotionEvent's gravity vector rather than
-// DeviceOrientationEvent angles: the direction of gravity within the screen plane
-// (atan2(gx, gy)) tracks a "steering-wheel" rotation of the phone regardless of whether
-// it's held portrait or landscape, and calibration absorbs whatever the base tilt is.
-// Hidden entirely if the device can't report motion. iOS 13+ needs an explicit
-// permission request from a user gesture, so we do it on the button tap.
+// True when a touch landed on something that should handle it itself rather than
+// spawning a stick — any button, link, form control, or an open menu/modal/panel
+// (those overlays cover the screen, so a touch on them means "interact with the UI").
+function isUiTarget(el: EventTarget | null): boolean {
+  const node = el as Element | null;
+  return !!node && typeof node.closest === 'function' && !!node.closest(
+    'button, a, input, select, label, #scenario-menu-overlay, #startup-modal-overlay, #ctrl-panel'
+  );
+}
+
+function initDynamicSticks(): void {
+  // left half -> x = lateral strafe (right +), screen-up = forward throttle (strafeForward +)
+  const left = makeFloatingStick('joy-zone', (nx, ny) => TouchInput.setLeftStick(nx, -ny));
+  // right half -> aim (screen-up = pitch up (keyboard pitchUp = -1), x = yaw right(+))
+  const right = makeFloatingStick('joy-zone-right', (nx, ny) => TouchInput.setAim(ny, nx));
+
+  window.addEventListener('touchstart', e => {
+    let started = false;
+    for (const t of Array.from(e.changedTouches)) {
+      if (isUiTarget(t.target)) continue;
+      const slot = t.clientX < window.innerWidth / 2 ? left : right;
+      if (slot.activeId !== null) continue; // that half already owns a stick
+      slot.begin(t.identifier, t.clientX, t.clientY);
+      started = true;
+    }
+    if (started) e.preventDefault(); // suppress emulated mouse/scroll for a claimed touch only
+  }, { passive: false });
+
+  window.addEventListener('touchmove', e => {
+    let moved = false;
+    for (const t of Array.from(e.changedTouches)) {
+      if (left.activeId === t.identifier) { left.move(t.clientX, t.clientY); moved = true; }
+      else if (right.activeId === t.identifier) { right.move(t.clientX, t.clientY); moved = true; }
+    }
+    if (moved) e.preventDefault();
+  }, { passive: false });
+
+  function release(e: TouchEvent): void {
+    for (const t of Array.from(e.changedTouches)) {
+      if (left.activeId === t.identifier) left.end();
+      else if (right.activeId === t.identifier) right.end();
+    }
+  }
+  window.addEventListener('touchend', release);
+  window.addEventListener('touchcancel', release);
+
+  // a rotate/resize mid-drag would leave a stick pinned to a now-wrong point — drop both
+  window.addEventListener('resize', () => {
+    if (left.activeId !== null) left.end();
+    if (right.activeId !== null) right.end();
+  });
+}
+
+// Device-gyro flight (opt-in): bank the phone left/right for roll, tilt it forward/back
+// for pitch. Uses DeviceMotionEvent's gravity vector rather than DeviceOrientationEvent
+// angles, and reads two independent quantities from it:
+//   roll  = atan2(gx, gy)          -> the in-screen-plane "bank" angle (rotation about
+//                                     the screen normal); unaffected by forward/back tilt.
+//   pitch = atan2(gz, |g in-plane|)-> how far the screen is reclined from vertical
+//                                     (rotation about a screen-plane axis); unaffected by bank.
+// Both work the same in portrait or landscape, and calibration on enable absorbs whatever
+// the resting hold angle is. Hidden entirely if the device can't report motion. iOS 13+
+// needs an explicit permission request from a user gesture, so we do it on the button tap.
 function initGyroRoll(): void {
   const btn = document.getElementById('tb-gyro') as HTMLButtonElement | null;
   if (!btn || typeof DeviceMotionEvent === 'undefined') return;
   btn.hidden = false;
 
-  const MAX_TILT = Math.PI / 4; // 45° of steering-wheel rotation = full roll deflection
+  const MAX_ROLL_TILT = Math.PI / 4;  // 45° of bank = full roll deflection
+  const MAX_PITCH_TILT = Math.PI / 4; // 45° of forward/back tilt = full pitch
+  const PITCH_SIGN = -1;              // inverted: tilt nose-down pitches the ship up (flight-yoke feel)
+  const DEADZONE = 0.1;               // normalized; ignore small tilts so a steady hold doesn't drift
   let on = false;
-  let neutral = 0;
+  let neutralRoll = 0, neutralPitch = 0;
   let calibrated = false;
+
+  // normalize a tilt delta to [-1,1] with a small center deadzone
+  function shape(diff: number, maxTilt: number): number {
+    let v = clamp(diff / maxTilt, -1, 1);
+    if (Math.abs(v) < DEADZONE) return 0;
+    return (v - Math.sign(v) * DEADZONE) / (1 - DEADZONE);
+  }
 
   function onMotion(e: DeviceMotionEvent): void {
     const g = e.accelerationIncludingGravity;
-    if (!g || g.x == null || g.y == null) return;
-    const angle = Math.atan2(g.x, g.y);
-    if (!calibrated) { neutral = angle; calibrated = true; TouchInput.setRoll(0); return; }
-    let diff = angle - neutral;
-    while (diff > Math.PI) diff -= 2 * Math.PI;
-    while (diff < -Math.PI) diff += 2 * Math.PI;
-    TouchInput.setRoll(clamp(diff / MAX_TILT, -1, 1));
+    if (!g || g.x == null || g.y == null || g.z == null) return;
+    const bank = Math.atan2(g.x, g.y);                       // roll axis
+    const recline = Math.atan2(g.z, Math.hypot(g.x, g.y));   // forward/back pitch axis
+    if (!calibrated) {
+      neutralRoll = bank; neutralPitch = recline; calibrated = true;
+      TouchInput.setGyro(0, 0);
+      return;
+    }
+    let dRoll = bank - neutralRoll;
+    while (dRoll > Math.PI) dRoll -= 2 * Math.PI;
+    while (dRoll < -Math.PI) dRoll += 2 * Math.PI;
+    const dPitch = recline - neutralPitch; // recline stays within ±π/2, no wrap needed
+    TouchInput.setGyro(shape(dRoll, MAX_ROLL_TILT), PITCH_SIGN * shape(dPitch, MAX_PITCH_TILT));
   }
 
   async function enable(): Promise<void> {
@@ -153,7 +218,7 @@ function initGyroRoll(): void {
   function disable(): void {
     on = false;
     window.removeEventListener('devicemotion', onMotion);
-    TouchInput.setRoll(0);
+    TouchInput.setGyro(0, 0);
     btn!.classList.remove('on');
   }
   // click (not touchstart) so the tap counts as the user gesture iOS requires for requestPermission
