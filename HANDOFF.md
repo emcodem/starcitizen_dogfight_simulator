@@ -347,6 +347,27 @@ never touches the preset code:
    bindings (see the `AXIS_INDEX` guess table in `joystickAxes.ts`, still a
    known gap for XML imports specifically).
 
+   Manual axis/button bindings also record a **capability fingerprint** so two
+   devices sharing a vid/pid — e.g. two vJoy virtual sticks, both
+   VID 1234 / PID BEAD — can be told apart: vid/pid alone is not unique, so
+   `findByVidPid` would resolve both bindings to the *first* matching gamepad
+   (bind pitch to one vJoy and yaw to the other and both would drive the same
+   stick). The browser Gamepad API exposes no per-device GUID/serial (that's
+   what Joystick Gremlin uses via DirectInput), so `gamepadModule.findDevice`
+   identifies a device by `(vid, pid, axisCount, buttonCount)` — the axis and
+   button counts, captured at bind time. This is the same signal a Gremlin user
+   relies on: give each vJoy a *different* number of axes/buttons in the vJoy
+   config and each is uniquely named. It's index-independent, so it survives a
+   reload/replug (unlike the raw Gamepad-API connection index, which is *not*
+   used for identity — an earlier index/ordinal fallback was deliberately
+   removed). Both counts are optional (older presets omit them) so legacy
+   bindings still resolve by vid/pid alone. **Limitation:** two devices
+   configured with the *same* axis/button count are indistinguishable (the
+   fingerprint collapses them and the first is returned) — so to split controls
+   across two vJoys, configure them with different axis/button counts. The
+   XML-import path has no fingerprint (`ScDevice` only carries a vid/pid) so
+   identical devices still can't be told apart there either — a known gap.
+
 3. **`input/joystickButtons.ts`** — button bindings, manual-capture only (SC's
    actionmaps.xml button tokens aren't parsed). Currently wired for exactly
    two actions: `decoupleToggle` (edge-detected via `justPressed`, a real

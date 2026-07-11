@@ -1,6 +1,6 @@
 import type { AxisConcept, StickAxes } from '../types';
 import { getAxisMap, getScDevices } from './deviceState';
-import { findByVidPid } from './gamepadModule';
+import { findByVidPid, findDevice } from './gamepadModule';
 
 // =====================================================================
 // JoystickAxes — resolves the parsed actionmaps.xml axis bindings (or a
@@ -26,21 +26,23 @@ function readAxisFor(concept: AxisConcept): number | null {
   const binding = getAxisMap()[concept];
   if (!binding) return null; // not bound to any joystick
 
-  let vid: string | null, pid: string | null, idx: number | undefined;
+  let pad: ReturnType<typeof findByVidPid>, idx: number | undefined;
   if (binding.manual) {
     // manually captured via live axis-wiggle detection — exact vid/pid/index,
-    // no letter-to-index guessing involved (see completeAxisRebind)
-    vid = binding.vid; pid = binding.pid; idx = binding.axisIndex;
+    // no letter-to-index guessing involved (see completeAxisRebind). Resolve via the
+    // device discriminator so two physically-identical sticks (same vid/pid) don't collide.
+    pad = findDevice(binding);
+    idx = binding.axisIndex;
   } else {
     // resolved from an imported actionmaps.xml: instance -> device -> best-effort
-    // letter-to-index guess (AXIS_INDEX above)
+    // letter-to-index guess (AXIS_INDEX above). No per-device discriminator here (the XML
+    // only carries a vid/pid via ScDevice), so identical devices can't be told apart on this path.
     const dev = getScDevices().find(d => d.instance === binding.instance);
     if (!dev || !dev.vid) return null;
-    vid = dev.vid; pid = dev.pid;
+    pad = findByVidPid(dev.vid, dev.pid);
     idx = AXIS_INDEX[binding.axis];
   }
 
-  const pad = findByVidPid(vid, pid);
   if (!pad) return null; // device known, but not currently seen by the browser
   if (idx === undefined || idx >= pad.axesValues.length) return null;
   let v = pad.axesValues[idx];

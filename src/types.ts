@@ -269,6 +269,11 @@ export interface ManualAxisBinding {
   axisIndex: number;
   label: string;
   manual: true;
+  // Capability fingerprint, to tell apart two devices sharing a vid/pid (e.g. two vJoy sticks
+  // configured with different axis/button counts). Optional so presets saved before this existed
+  // still load — see gamepadModule.DeviceRef / findDevice.
+  axisCount?: number;
+  buttonCount?: number;
 }
 
 export type AxisBinding = XmlAxisBinding | ManualAxisBinding;
@@ -279,6 +284,9 @@ export interface ButtonBinding {
   pid: string;
   buttonIndex: number;
   label: string;
+  // Capability fingerprint for same-model devices — see ManualAxisBinding above.
+  axisCount?: number;
+  buttonCount?: number;
 }
 export type ButtonMap = Partial<Record<ActionName, ButtonBinding>>;
 

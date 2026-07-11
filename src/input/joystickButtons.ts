@@ -1,6 +1,6 @@
 import type { ActionName } from '../types';
 import { getButtonMap } from './deviceState';
-import { findByVidPid } from './gamepadModule';
+import { findDevice } from './gamepadModule';
 
 // =====================================================================
 // JoystickButtons — two read modes for a bound joystick button: `justPressed`
@@ -14,7 +14,7 @@ const prevPressed: Partial<Record<ActionName, boolean>> = {}; // last frame's st
 export function isPressed(action: ActionName): boolean {
   const binding = getButtonMap()[action];
   if (!binding) return false;
-  const pad = findByVidPid(binding.vid, binding.pid);
+  const pad = findDevice(binding);
   if (!pad || binding.buttonIndex >= pad.buttonsPressed.length) return false;
   return pad.buttonsPressed[binding.buttonIndex];
 }

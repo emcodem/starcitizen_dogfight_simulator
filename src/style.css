@@ -228,7 +228,7 @@ body.touch #ctrl-toggle { top: 34px; bottom: auto; right: 8px; }
 }
 #ctrl-panel h3 {
   margin: 0 0 8px; font-size: 12px; letter-spacing: 1px;
-  color: var(--accent); text-transform: uppercase; border-bottom: 1px solid var(--hud-dim); padding-bottom: 6px;
+  color: var(--accent); text-transform: uppercase; padding-bottom: 6px;
 }
 #ctrl-close-btn {
   position: absolute; top: 10px; right: 12px; margin: 0;
@@ -251,6 +251,19 @@ body.touch #ctrl-toggle { top: 34px; bottom: auto; right: 8px; }
 #ctrl-panel .ctrl-missing { color: var(--hud-dim-light); }
 
 #ctrl-bindings-list.ctrl-list { max-height: none; overflow: visible; }
+
+/* Collapsible sub-section (default open). The <summary> stands in for the label above the list. */
+#ctrl-panel .ctrl-collapsible { margin-top: 8px; }
+#ctrl-panel .ctrl-collapsible > summary {
+  display: block; cursor: pointer; color: var(--hud-dim-light); margin-bottom: 4px;
+  list-style: none; user-select: none;
+}
+#ctrl-panel .ctrl-collapsible > summary::-webkit-details-marker { display: none; }
+#ctrl-panel .ctrl-collapsible > summary::before { content: '▾ '; color: var(--hud-dim); }
+#ctrl-panel .ctrl-collapsible:not([open]) > summary::before { content: '▸ '; }
+#ctrl-panel .ctrl-collapsible > summary:hover { color: var(--accent); }
+/* Show every detected device in full — no inner scrollbar (the panel itself scrolls if needed). */
+#ctrl-gamepad-list.ctrl-list { max-height: none; overflow: visible; }
 #ctrl-bindings-table { width: 100%; border-collapse: collapse; font-size: 11px; }
 #ctrl-bindings-table th {
   text-align: left; color: var(--hud-dim-light); text-transform: uppercase; letter-spacing: 0.5px;

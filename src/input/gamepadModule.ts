@@ -53,6 +53,44 @@ export function getSnapshot(): GamepadSnapshot[] {
   return snapshot;
 }
 
+// A stored reference to one physical device. vid/pid alone are NOT unique when two
+// same-model devices are connected (e.g. two vJoy virtual sticks, both VID 1234 PID BEAD),
+// so a binding also records a capability "fingerprint" — the device's axis and button counts.
+//
+// This is the same identity signal Joystick Gremlin uses: give each vJoy a different number
+// of axes/buttons in the vJoy config, and (vid, pid, axisCount, buttonCount) uniquely names it.
+// It's the only reasonably-stable per-device signal the browser Gamepad API exposes — there is
+// no GUID or serial number — and unlike the connection index it survives a reload/replug.
+//
+// Limitation: two devices configured with the SAME axis/button count are indistinguishable here.
+// To bind two vJoy devices to different controls, configure them with different axis/button counts.
+export interface DeviceRef {
+  vid: string | null;
+  pid: string | null;
+  axisCount?: number;
+  buttonCount?: number;
+}
+
+// True when `pad` matches `ref`'s identity — same vid/pid and same capability fingerprint. The
+// count checks are skipped when the ref didn't record them (a preset saved before fingerprinting
+// existed), so old bindings still resolve by vid/pid alone.
+function inDeviceGroup(pad: GamepadSnapshot, ref: DeviceRef): boolean {
+  if (pad.vid !== ref.vid || pad.pid !== ref.pid) return false;
+  if (ref.axisCount !== undefined && pad.axesValues.length !== ref.axisCount) return false;
+  if (ref.buttonCount !== undefined && pad.buttonsPressed.length !== ref.buttonCount) return false;
+  return true;
+}
+
+// Resolve a stored device reference to a live gamepad snapshot by its capability fingerprint.
+// Returns null if no matching device is currently seen. If two connected devices share the same
+// fingerprint (identically-configured — see DeviceRef) they can't be told apart; the first is
+// returned as a best effort.
+export function findDevice(ref: DeviceRef): GamepadSnapshot | null {
+  return snapshot.find(p => inDeviceGroup(p, ref)) || null;
+}
+
+// Back-compat convenience for callers that only have a vid/pid and don't need to distinguish
+// same-model devices (there's only ever one system mouse, one XML-imported device per instance).
 export function findByVidPid(vid: string | null, pid: string | null): GamepadSnapshot | null {
-  return snapshot.find(p => p.vid === vid && p.pid === pid) || null;
+  return findDevice({ vid, pid });
 }

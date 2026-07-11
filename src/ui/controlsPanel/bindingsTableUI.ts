@@ -1,4 +1,4 @@
-import type { ActionName, AxisConcept } from '../../types';
+import type { ActionName, AxisConcept, GamepadSnapshot } from '../../types';
 import * as ControlsModule from '../../input/controlsModule';
 import * as GamepadModule from '../../input/gamepadModule';
 import * as JoystickAxes from '../../input/joystickAxes';
@@ -57,10 +57,13 @@ function cancelAxisRebind(): void {
   axisRebindBaseline = null;
 }
 
-function completeAxisRebind(concept: AxisConcept, pad: { id: string; vid: string | null; pid: string | null }, axisIndex: number): void {
+function completeAxisRebind(concept: AxisConcept, pad: GamepadSnapshot, axisIndex: number): void {
   if (!pad.vid || !pad.pid) return; // guarded by callers, but keeps TS happy
   const niceName = pad.id.split('(')[0].trim();
-  bindAxis(concept, { vid: pad.vid, pid: pad.pid, axisIndex, label: `${niceName} axis[${axisIndex}]`, manual: true });
+  // Record the capability fingerprint (axis + button counts) so this device can be told apart
+  // from another with the same vid/pid, e.g. a second vJoy — see gamepadModule.findDevice.
+  const ref = { vid: pad.vid, pid: pad.pid, axisCount: pad.axesValues.length, buttonCount: pad.buttonsPressed.length };
+  bindAxis(concept, { ...ref, axisIndex, label: `${niceName} axis[${axisIndex}]`, manual: true });
   rebindStatus.textContent = `Bound "${niceName}" axis [${axisIndex}] to ${CONCEPT_LABELS[concept] || concept}.`;
   cancelAxisRebind();
   renderBindings();
@@ -133,10 +136,12 @@ function cancelButtonRebind(): void {
   buttonRebindBaseline = null;
 }
 
-function completeButtonRebind(action: ActionName, pad: { id: string; vid: string | null; pid: string | null }, buttonIndex: number): void {
+function completeButtonRebind(action: ActionName, pad: GamepadSnapshot, buttonIndex: number): void {
   if (!pad.vid || !pad.pid) return;
   const niceName = pad.id.split('(')[0].trim();
-  bindButton(action, { vid: pad.vid, pid: pad.pid, buttonIndex, label: `${niceName} button[${buttonIndex}]` });
+  // See completeAxisRebind — same capability fingerprint.
+  const ref = { vid: pad.vid, pid: pad.pid, axisCount: pad.axesValues.length, buttonCount: pad.buttonsPressed.length };
+  bindButton(action, { ...ref, buttonIndex, label: `${niceName} button[${buttonIndex}]` });
   rebindStatus.textContent = `Bound "${niceName}" button [${buttonIndex}] to ${ControlsModule.getActionLabels()[action]}.`;
   cancelButtonRebind();
   renderBindings();
@@ -338,7 +343,7 @@ export function renderBindings(): void {
       if (isListening) {
         valueHtml = '<span class="ctrl-found">listening… press a button</span>';
       } else if (binding) {
-        const detected = !!GamepadModule.findByVidPid(binding.vid, binding.pid);
+        const detected = !!GamepadModule.findDevice(binding);
         valueHtml = detected
           ? `<span class="ctrl-found">${binding.label}</span>`
           : `<span class="ctrl-missing">${binding.label} (not detected)</span>`;

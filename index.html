@@ -164,8 +164,10 @@
     </div>
     <label>Devices found in your actionmaps.xml</label>
     <div id="ctrl-sc-devices-list" class="ctrl-list">(load actionmaps.xml above)</div>
-    <label style="margin-top:8px">Devices the browser currently sees</label>
-    <div id="ctrl-gamepad-list" class="ctrl-list">(none yet — press a button on each device)</div>
+    <details class="ctrl-collapsible" open>
+      <summary>Devices the browser currently sees</summary>
+      <div id="ctrl-gamepad-list" class="ctrl-list">(none yet — press a button on each device)</div>
+    </details>
     <div class="ctrl-status" id="ctrl-gamepad-support-status"></div>
 
     <label style="margin-top:8px">Resolved analog axes (live)</label>

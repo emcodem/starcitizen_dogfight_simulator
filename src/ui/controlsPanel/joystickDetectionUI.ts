@@ -49,8 +49,14 @@ export function renderGamepads(): void {
   } else {
     gamepadList.innerHTML = pads.map(p => {
       const axesStr = p.axesValues.map((v, i) => `[${i}]${v.toFixed(2)}`).join(' ');
-      return `<div class="ctrl-found">#${p.index}: ${p.id}<br>&nbsp;&nbsp;axes: ${axesStr}` +
-        (p.vid ? ` — VID ${p.vid} PID ${p.pid}` : '') + `</div>`;
+      // Listing every button is too noisy on big HOTAS — show the total count and only which
+      // indices are currently pressed (so a user can identify a button by pressing it).
+      const pressed = p.buttonsPressed.reduce<number[]>((acc, isDown, i) => (isDown && acc.push(i), acc), []);
+      const buttonsStr = `count ${p.buttonsPressed.length}, pressed: [${pressed.join(', ')}]`;
+      return `<div class="ctrl-found">#${p.index}: ${p.id}` +
+        (p.vid ? ` — VID ${p.vid} PID ${p.pid}` : '') +
+        `<br>&nbsp;&nbsp;axes: ${axesStr}` +
+        `<br>&nbsp;&nbsp;buttons: ${buttonsStr}</div>`;
     }).join('');
   }
   renderScDevices(); // cross-reference depends on the current pad snapshot too
