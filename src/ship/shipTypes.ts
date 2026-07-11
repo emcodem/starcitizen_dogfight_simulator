@@ -110,6 +110,23 @@ import type { ShipType } from '../types';
 //     forward's scmSpeed.
 //   - Coasting deceleration: releasing forward thrust at cruise speed loses ~8 m/s every 5 frames
 //     (25fps) = a flat 40 m/s^2 the whole way to a stop, not a decaying rate => coastDecel = 40
+//   - Space brake (forward): dense trace holding brake ONLY, no other input, from 225 m/s to a dead
+//     stop (40ms steps, 25fps) — 225, 222, 220, 217, 214, 212, 209, 206, 204, 201, 198, 196, ...
+//     down through the 100s and 10s to a very long tail of 1 m/s frames before finally 0, ~8.3s
+//     total (a few obvious transcription spikes cleaned out). Per-speed-bin average decel is a
+//     strikingly *flat* ~40 m/s^2 from 226 all the way down to ~40 m/s, then it tapers off hard:
+//     ~2.4s to bleed the last 10 m/s to zero. That flat-then-creep shape is NOT a constant decel
+//     (the old brake model — it stopped ~3x too fast near zero) and NOT plain proportional drag
+//     (which would taper across the *whole* range, never showing the flat top). It's a velocity
+//     controller targeting zero: decel = min(brakeGain*speed, thruster capacity). Grid-search fit
+//     over the whole trace: brakeGain ~= 1.04/s, saturation ~= 40 m/s^2, crossover ~38.5 m/s —
+//     reproduces every point to within ~1 m/s mean (0.62). Note the ~40 m/s^2 saturation sits just
+//     under the retro thruster's own ~42 m/s^2 (retro=63, itself confirmed by the reverse-accel
+//     trace above at 63.6/0.94-err — so retro is NOT wrong); the brake simply doesn't command the
+//     full retro rating. We keep the saturation tied to the (direction-dependent) thruster capacity
+//     in flightModel.ts rather than hard-coding 40, so forward braking caps at 42 (~5% above the
+//     measured 40 over the >40 m/s stretch) while the tail — the part that was actually wrong — is
+//     reproduced exactly. See flightModel.ts's brake block.
 //   - Boosted forward thrust: standing-start with boost held the whole time, frame-by-frame to
 //     402 m/s (0->98->200->305->402 over 17/13/12/15 frames) then coarser splits to 512 by 4.68s
 //     total. The first ~0.2s undershoots the rest of the curve — traced to the user's own throttle
@@ -130,6 +147,7 @@ export const SHIP_TYPES: ShipType[] = [
     linearDrag: 0.001,
     boostLinearDrag: 0.909,
     coastDecel: 40,
+    brakeGain: 1.04,
     angularDrag: { pitch: 10.2740, yaw: 15.4639, roll: 5.3571 },
     maxAngVel: { pitch: 1.19, yaw: 0.91, roll: 3.49 },
     scmSpeed: 226,

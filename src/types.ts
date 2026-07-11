@@ -48,6 +48,11 @@ export interface ShipType {
                                       // braking) — real Gladius sheds speed at a flat rate here, not
                                       // proportional drag (which would taper as speed drops) — see
                                       // physics/flightModel.ts and shipTypes.ts
+  brakeGain: number;                 // 1/s — space-brake velocity-controller gain. The flight
+                                      // computer commands a deceleration proportional to current
+                                      // speed (brakeGain * speed), saturated at the combined-axis
+                                      // thruster capacity, so braking eases off near zero instead of
+                                      // stopping flat — measured, see flightModel.ts / shipTypes.ts.
   angularDrag: AngularState;         // per-axis — real Gladius spins down at a different rate per axis
   maxAngVel: AngularState;
   scmSpeed: number;                 // coupled-mode speed cap, forward (local +Z velocity)

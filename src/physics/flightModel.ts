@@ -154,7 +154,17 @@ export function integrateFlight(body: FlightBody, input: FlightInputs, dt: numbe
       if (Math.abs(unit.y) > AXIS_EPS) maxDecel = Math.min(maxDecel, (brakeVerticalThrust / t.mass) / Math.abs(unit.y));
       if (Math.abs(unit.z) > AXIS_EPS) maxDecel = Math.min(maxDecel, (longitudinalThrust / t.mass) / Math.abs(unit.z));
 
-      const newSpeed = Math.max(0, speed - maxDecel * dt);
+      // The brake is a flight-computer velocity controller targeting zero speed: it commands a
+      // deceleration PROPORTIONAL to current speed (brakeGain * speed), saturated at maxDecel (the
+      // combined-axis thruster capacity above). Measured on the real Gladius (forward brake, 226 m/s
+      // to a dead stop, 25fps trace): a flat ~40 m/s^2 above ~40 m/s, then a long proportional creep
+      // to a near-stop — ~2.4s just from 10 m/s to 0. Fit brakeGain ~= 1.04/s, crossover (where
+      // brakeGain*speed meets maxDecel) ~= 40 m/s; reproduces the whole trace to within ~1 m/s.
+      // Without the proportional term the brake decelerated flat all the way down and stopped roughly
+      // 3x too fast near zero. brakeGain is direction-agnostic (one brake button, one control law) —
+      // only forward was traced, but the same easing is applied whichever thruster is doing the work.
+      const brakeDecel = Math.min(maxDecel, t.brakeGain * speed);
+      const newSpeed = Math.max(0, speed - brakeDecel * dt);
       localVel.x = unit.x * newSpeed;
       localVel.y = unit.y * newSpeed;
       localVel.z = unit.z * newSpeed;
