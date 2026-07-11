@@ -14,7 +14,7 @@ const vjoyChromeWarning = document.getElementById('ctrl-vjoy-chrome-warning') as
 // the message is identical everywhere: on Chrome/Edge, vJoy doesn't just read zero — its mere
 // presence stops REAL sticks from being enumerated at all. Firefox is unaffected.
 const VJOY_CHROME_TOOLTIP =
-  'On Chrome/Edge, having vJoy installed prevents real devices from being detected at all — and ' +
+  'On Chrome/Edge, having vJoy installed can prevent some devices from being detected — and ' +
   'vJoy’s own axes read as zero. Use Firefox for vJoy, or uninstall/disable vJoy to use your real stick in Chrome.';
 
 // vJoy shares one USB vendor/product ID (1234:BEAD) across all its virtual devices; the id string
@@ -90,9 +90,9 @@ export function renderGamepads(): void {
   vjoyChromeWarning.style.display = chromeVjoyPresent ? 'block' : 'none';
   if (chromeVjoyPresent) {
     vjoyChromeWarning.innerHTML =
-      '⚠ <b>vJoy detected in Chrome/Edge.</b> On Chromium, the presence of vJoy prevents your ' +
-      '<b>real</b> devices from being detected at all (and vJoy’s own axes read as zero). ' +
-      'If a stick is missing below, this is why — use <b>Firefox</b>, or uninstall/disable vJoy to fly with your real stick in Chrome.';
+      '⚠ <b>vJoy detected in Chrome/Edge.</b> On Chromium, having vJoy installed can prevent ' +
+      'some of your <b>real</b> devices from being detected (and vJoy’s own axes read as zero). ' +
+      'If a stick is missing below, this may be why — use <b>Firefox</b>, or uninstall/disable vJoy to fly with your real stick in Chrome.';
   }
   if (!pads.length) {
     const d = GamepadModule.getDiagnostics();
