@@ -36,6 +36,7 @@ export const FIGHTER_TUNING_ACE: FighterTuning = {
   engageRange: 450,
   engageBand: 120,
   closeRange: 1300,
+  closeBoost: true,
   fireRange: 900,
   fireLateralTolerance: 10,
   overshootAngleRad: 2.7,        // ~155 degrees — only extends on a near-total reversal
@@ -57,12 +58,23 @@ export const FIGHTER_TUNING_ROOKIE: FighterTuning = {
   steerGain: 3,
   engageRange: 800,
   engageBand: 220,
-  closeRange: 1300,
+  closeRange: 1000, // keep the rookie within realistic pursuit range — see the now-unconditional
+                     // tooFar check in think() for why this is an actual ceiling, not just a
+                     // between-commits suggestion
+  closeBoost: false, // a merge at boostSpeedForward (520) rather than scmSpeed (226) roughly
+                      // quadruples the coasting distance needed to arrest an overshoot afterward
+                      // (stopping distance scales with v²) — keeping the approach unboosted is what
+                      // actually makes the 1km ceiling above hold up in practice, not just on paper
   fireRange: 800,
   fireLateralTolerance: 6,        // needs a much cleaner shot before it'll pull the trigger
   overshootAngleRad: 0.9,         // ~52 degrees — bails into reposition easily
   repositionExtendBias: 0.85,     // commits hard to running before circling back
-  repositionBoost: true,
+  // Off (unlike the ace) — reposition triggers right after any close pass, often while still
+  // carrying real leftover velocity from the merge itself; boosting on top of THAT (rather than
+  // from a normal stop) is what let the eventual recovery, once tooFar forces it back to 'close',
+  // overshoot well past closeRange before the brake could arrest the extra speed. A "hesitant,
+  // spooked" pilot redlining the afterburner mid-confusion doesn't read as more rookie-like either.
+  repositionBoost: false,
   // With a high extend bias and a physically slow-turning hull (see ROOKIE_GLADIUS's angularScale
   // in scenarios/definitions.ts), the nose can take a very long time to swing back within
   // overshootAngleRad in the worst-case merge geometry (extending almost exactly away from the
@@ -171,11 +183,57 @@ export function think(enemy: EnemyShip, ai: FighterAIMemory, player: Ship, dt: n
   // and fight back instead.
   if (ai.modeTimer > 0) ai.modeTimer -= dt;
 
-  if (ai.mode === 'evade') {
+  // Distance is the one override that ISN'T allowed to wait out modeTimer: an evade/reposition
+  // commit window (or a slow-converging reposition) could otherwise keep the nose pointed away
+  // from the player for its whole duration while already extending at speed, letting separation
+  // grow well past closeRange before the next re-evaluation even happens (observed running the
+  // rookie out past 1300-1400m this way, despite closeRange nominally being the ceiling). Checking
+  // this unconditionally, every tick, means "too far" can interrupt any in-progress mode the
+  // instant it becomes true, so closeRange is an actual ceiling instead of just this tick's
+  // opinion the next commit window is free to ignore.
+  //
+  // Reacting only once dist has ALREADY crossed closeRange still isn't enough on its own: a real
+  // ship needs actual travel distance to arrest speed under bounded thrust (stopping distance ==
+  // v^2 / (2*decel)), so waiting for the crossing before braking guarantees overshooting past it by
+  // roughly a full stopping distance every time (measured ~450-650m at this hull's own top speed).
+  // Folding a predicted stopping distance into the threshold — using outward speed AND a
+  // conservative achievable deceleration (retro thrust, the weakest of the axes the space brake
+  // draws on) — means the ceiling anticipates "I'm about to overshoot" instead of only reacting
+  // after the fact, so the actual peak excursion stays close to closeRange instead of
+  // closeRange-plus-a-whole-stopping-distance.
+  const outwardSpeed = Math.max(0, -(enemy.vel.x * toPlayerDir.x + enemy.vel.y * toPlayerDir.y + enemy.vel.z * toPlayerDir.z));
+  const assumedBrakeDecel = enemy.type.linearThrust.retro / enemy.type.mass;
+  const predictedStopDistance = (outwardSpeed * outwardSpeed) / (2 * assumedBrakeDecel);
+  const projectedDist = dist + predictedStopDistance;
+  // Hysteresis: outward speed decays smoothly tick to tick while braking, so projectedDist can sit
+  // right on the enter threshold for many consecutive ticks as it settles — without a lower exit
+  // threshold, that flip-flops 'close' in and out every tick (observed re-triggering every
+  // 10-20ms), which reads as visible nose-flicking jitter even though the resulting distance is
+  // fine. Once forced into 'close', require dropping meaningfully further below closeRange (not
+  // just back under it) before letting go again.
+  const tooFar = ai.mode === 'close' ? projectedDist > tuning.closeRange * 0.85 : projectedDist > tuning.closeRange;
+
+  if (tooFar) {
+    // Deliberately NOT arming modeTimer here, unlike every other transition below — 'close' is just
+    // "make progress toward the target", not a maneuver that needs protected execution time the way
+    // evade/reposition do. Arming a modeCommitSeconds floor on entry used to lock the ship into
+    // max-throttle pursuit for up to 2 more seconds even after crossing back inside closeRange —
+    // at real merge closing speeds that's hundreds of meters of travel before it could ever
+    // downshift into 'engage' (which actually slows down near the target), carrying it well past
+    // the player and right back out past closeRange on the far side. Leaving modeTimer alone lets
+    // the very next tick's re-evaluation (below) switch out of 'close' the instant it's no longer
+    // needed. Also explicitly clears modeTimer (rather than leaving it as-is) — forcing 'close' can
+    // interrupt an evade/reposition commit that still had time left on its own timer, which would
+    // otherwise carry that leftover lock over and block this same re-evaluation for up to another
+    // modeCommitSeconds.
+    ai.mode = 'close';
+    ai.modeTimer = 0;
+  } else if (ai.mode === 'evade') {
     if (ai.modeTimer <= 0) {
       // coming out of evade the nose is pointed away from the fight — loop back around rather
-      // than assuming a clean shot is immediately available
-      ai.mode = dist > tuning.closeRange ? 'close' : 'reposition';
+      // than assuming a clean shot is immediately available (tooFar is already excluded above, so
+      // this is always a reposition, not a fresh close-range burn)
+      ai.mode = 'reposition';
       ai.modeTimer = tuning.modeCommitSeconds;
     }
   } else if (threatened && ai.modeTimer <= 0) {
@@ -184,14 +242,11 @@ export function think(enemy: EnemyShip, ai: FighterAIMemory, player: Ship, dt: n
   } else if (ai.modeTimer <= 0) {
     // a high repositionExtendBias plus a slow-turning hull can make the aim-angle convergence
     // below take an unreasonably long time in the worst-case merge geometry (extending almost
-    // exactly away from the target) — force it back to 'close' once that's clearly happening
-    // instead of letting it run indefinitely (see repositionMaxSeconds's doc comment).
+    // exactly away from the target) — force it back to 'engage' once that's clearly happening
+    // instead of letting it run indefinitely (see repositionMaxSeconds's doc comment). tooFar is
+    // already excluded above, so this only ever chooses between reposition and engage.
     const givingUpOnReposition = ai.mode === 'reposition' && ai.repositionElapsed >= tuning.repositionMaxSeconds;
-    const next = dist > tuning.closeRange
-      ? 'close'
-      // bad angle to the target — extend and loop back rather than trying to muscle an instant
-      // reversal (how readily this triggers, and how far it commits to extending, is tuning-driven)
-      : (aimAngle > tuning.overshootAngleRad && !givingUpOnReposition) ? 'reposition' : 'engage';
+    const next = (aimAngle > tuning.overshootAngleRad && !givingUpOnReposition) ? 'reposition' : 'engage';
     if (next !== ai.mode) ai.modeTimer = tuning.modeCommitSeconds;
     ai.mode = next;
   }
@@ -204,11 +259,26 @@ export function think(enemy: EnemyShip, ai: FighterAIMemory, player: Ship, dt: n
   let wantsToFire = false;
 
   switch (ai.mode) {
-    case 'close':
+    case 'close': {
       steerDir = toPlayerDir; // pure pursuit while just eating distance
-      throttle = 1;
-      boostRequested = dist > tuning.closeRange * 1.4;
+      // If there's still real outward velocity (leftover from a merge pass, or from a reposition
+      // extend just cut short by the tooFar override above), turning the nose around and thrusting
+      // forward alone can take several seconds for a slow-turning hull — coasting further away the
+      // whole time the turn is in progress, which is exactly what let closeRange get blown through
+      // by a wide margin even with the tooFar check firing immediately. Braking kills that outward
+      // velocity directly, independent of which way the nose currently points, so recovering from
+      // an overshoot doesn't depend on how long the reversal turn itself takes.
+      const closingSpeed = enemy.vel.x * toPlayerDir.x + enemy.vel.y * toPlayerDir.y + enemy.vel.z * toPlayerDir.z;
+      brake = closingSpeed < 0;
+      // flightModel.ts applies throttle's own thrust AFTER the brake's velocity correction, every
+      // tick, regardless of input.brake — so leaving throttle at 1 here while braking keeps adding
+      // thrust along whatever direction the (not-yet-reoriented) nose currently points, which can
+      // reinforce the very outward drift the brake is trying to cancel instead of just getting out
+      // of its way.
+      throttle = brake ? 0 : 1;
+      boostRequested = tuning.closeBoost && !brake && dist > tuning.closeRange * 1.4;
       break;
+    }
 
     case 'reposition': {
       // keep flying roughly along current velocity (extend) with a bias back toward the player —
@@ -222,11 +292,12 @@ export function think(enemy: EnemyShip, ai: FighterAIMemory, player: Ship, dt: n
         z: extendDir.z * bias + toPlayerDir.z * (1 - bias)
       });
       throttle = 1;
-      // stop requesting boost once already well past closeRange — repositioning is meant to open a
-      // survivable gap to loop back from, not accelerate into a separation the player can never
-      // realistically close; unconditional boosting here (regardless of how far it had already run)
-      // was what let a long reposition turn into an unreachable, ever-growing lead.
-      boostRequested = tuning.repositionBoost && dist < tuning.closeRange * 1.4;
+      // Don't boost if already moving faster than scmSpeed — a merge pass (or a boosted 'close'
+      // chase) can leave real leftover velocity already carrying it away; boosting on top of THAT
+      // compounds an existing overshoot instead of just extending from a normal stop, and at high
+      // enough speed the eventual recovery (braking/reversing once tooFar forces it back to 'close')
+      // can take much longer/farther than the modest gap this mode is meant to open.
+      boostRequested = tuning.repositionBoost && speed < enemy.type.scmSpeed;
       break;
     }
 

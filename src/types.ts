@@ -179,6 +179,10 @@ export interface FighterTuning {
   engageRange: number;           // ideal stand-off distance for gunnery, meters
   engageBand: number;            // tolerance around engageRange before throttle corrects
   closeRange: number;            // beyond this, burn straight at the player to close distance
+  closeBoost: boolean;           // whether it burns boost while closing distance — a hesitant
+                                  // pilot redlining the afterburner on approach isn't just
+                                  // out-of-character, it also means a much higher merge speed to
+                                  // recover from if the pass leaves it overshooting past the target
   fireRange: number;             // won't pull the trigger past this range
   fireLateralTolerance: number;  // meters of allowed miss at the target, implied by aim-error * range
   overshootAngleRad: number;     // aim error beyond which it gives up turning and extends instead
