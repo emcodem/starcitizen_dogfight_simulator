@@ -59,8 +59,22 @@ export interface ShipType {
   scmSpeedBack: number;             // coupled-mode speed cap, backward (local -Z velocity)
   boostSpeedForward: number;        // coupled-mode speed cap while boosting, forward
   boostSpeedBack: number;           // coupled-mode speed cap while boosting, backward
-  boostCapacity: number;            // seconds of boost available from a full meter
-  boostRechargeRate: number;        // meter-seconds recovered per real second while not boosting
+  // Boost meter — real-game measurement (see shipTypes.ts) shows it isn't a plain linear
+  // drain/recharge: there's a "red zone" below which both rates change, plus a short delay before
+  // recharge kicks back in after boost stops. boostCapacity is kept as a percent (0-100) so the
+  // zone/rate fields below are directly in the same units as the meter itself.
+  boostCapacity: number;             // full-scale value of the meter (100 == a full percent scale)
+  boostRedZonePct: number;           // meter % at/below which the red-zone drain/recharge rates apply
+  boostReactivatePct: number;        // meter % a NEW boost burn requires before it may START — an
+                                      // ALREADY-ACTIVE burn is unaffected and may continue draining
+                                      // straight through the red zone down to 0
+  boostDrainRate: number;            // %/s drain while boosting, above boostRedZonePct
+  boostDrainRateRedZone: number;     // %/s drain while boosting, at/below boostRedZonePct — measured
+                                      // faster than the above-redline rate
+  boostRechargeRate: number;         // %/s recovery while not boosting, at/above boostRedZonePct
+  boostRechargeRateRedZone: number;  // %/s recovery while not boosting, below boostRedZonePct —
+                                      // measured much faster than the above-redline recharge
+  boostRechargeDelaySec: number;     // seconds after boost stops before recharge begins at all
   boostMaxAngVel: AngularState;     // rotation-rate cap while boosting
   boostAngularThrust: AngularState; // == boostMaxAngVel * angularDrag per axis — same derivation as angularThrust
   // main/retro thrust while boosting — == boostSpeedForward/Back * boostLinearDrag * mass, so continuous
@@ -80,8 +94,11 @@ export interface Ship {
   throttle: number; // -1..1, main/retro thrust intent
   decoupled: boolean;
   spaceBrakeOn: boolean;
-  boostMeter: number; // seconds of boost remaining, 0..type.boostCapacity
+  boostMeter: number; // percent (0..type.boostCapacity) of boost remaining — see ShipType's boost
+                       // meter fields for the zoned drain/recharge model this is driven by
   boosting: boolean;  // whether boost is actually in effect this frame (requested AND meter > 0)
+  boostCooldownTimer: number; // seconds remaining before the meter is allowed to start recharging —
+                               // see resolveBoost/ShipType.boostRechargeDelaySec
   exploding: boolean;
   explosionTimer: number;
   health?: Health; // present only while a combat scenario is active — absent in free flight
@@ -167,6 +184,13 @@ export interface FighterTuning {
   overshootAngleRad: number;     // aim error beyond which it gives up turning and extends instead
   repositionExtendBias: number;  // 0..1 weight on "keep extending" vs "turn back toward the player"
   repositionBoost: boolean;      // whether it burns boost while repositioning
+  repositionMaxSeconds: number;  // hard cap on continuous time spent in 'reposition' — a high
+                                  // repositionExtendBias combined with a slow turn rate can make the
+                                  // aim-angle convergence that normally ends this mode take a very
+                                  // long time in the worst-case merge geometry (nose pointed almost
+                                  // exactly away from the target); this forces it back to 'close'
+                                  // regardless of aim angle once it's clearly not converging in a
+                                  // reasonable time, so the target can't run indefinitely
   threatRange: number;           // player must be this close to be treated as a real threat
   threatConeRad: number;         // how tightly the player must be boresighted on us to evade
   evadeMinSeconds: number;       // minimum time spent evading once triggered, avoids flicker
@@ -185,6 +209,9 @@ export interface FighterAIMemory {
   modeTimer: number; // seconds remaining before the current mode may be involuntarily overridden
   clock: number;     // free-running elapsed seconds, used to phase weave/jink oscillations
   jinkSeed: number;  // randomized per spawn so multiple fighters don't jink in lockstep
+  repositionElapsed: number; // continuous seconds spent in 'reposition' so far — see
+                              // FighterTuning.repositionMaxSeconds; reset to 0 whenever the mode
+                              // isn't 'reposition'
   tuning: FighterTuning;
 }
 
@@ -226,6 +253,7 @@ export interface EnemyShip {
   angVel: AngularState;
   boostMeter: number;
   boosting: boolean;
+  boostCooldownTimer: number; // see Ship.boostCooldownTimer
   throttleSpoolTime: number; // see Ship.throttleSpoolTime / ShipType.mainSpoolDelay/retroSpoolDelay
   verticalSpoolTime: number; // see Ship.verticalSpoolTime / ShipType.verticalSpoolDelay
   health: Health;

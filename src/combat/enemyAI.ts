@@ -41,6 +41,8 @@ export const FIGHTER_TUNING_ACE: FighterTuning = {
   overshootAngleRad: 2.7,        // ~155 degrees — only extends on a near-total reversal
   repositionExtendBias: 0.3,     // prioritizes turning back over running, on the rare occasion it does
   repositionBoost: true,
+  repositionMaxSeconds: 5,       // rarely relevant (low extend bias + fast turn converge quickly
+                                  // already) — just a generous backstop
   threatRange: 700,
   threatConeRad: 0.22,           // ~13 degrees — only bails when precisely boresighted
   evadeMinSeconds: 1.2,
@@ -61,6 +63,14 @@ export const FIGHTER_TUNING_ROOKIE: FighterTuning = {
   overshootAngleRad: 0.9,         // ~52 degrees — bails into reposition easily
   repositionExtendBias: 0.85,     // commits hard to running before circling back
   repositionBoost: true,
+  // With a high extend bias and a physically slow-turning hull (see ROOKIE_GLADIUS's angularScale
+  // in scenarios/definitions.ts), the nose can take a very long time to swing back within
+  // overshootAngleRad in the worst-case merge geometry (extending almost exactly away from the
+  // target) — observed running away boosted for 30+ real seconds before it looped back, reading as
+  // a broken/unwinnable chase rather than a hesitant rookie. This forces it back to 'close' (which
+  // pursues directly, no extend bias) once reposition has clearly gone on too long, regardless of
+  // whether the aim angle has actually converged yet.
+  repositionMaxSeconds: 6,
   threatRange: 1000,
   threatConeRad: 0.4,             // ~23 degrees — spooked by anything roughly pointed its way
   evadeMinSeconds: 3.5,
@@ -120,6 +130,9 @@ function angleBetween(a: Vec3, b: Vec3): number {
 export function think(enemy: EnemyShip, ai: FighterAIMemory, player: Ship, dt: number): FighterDecision {
   const tuning = ai.tuning;
   ai.clock += dt;
+  // tracks continuous time in 'reposition' (see FighterTuning.repositionMaxSeconds) — based on the
+  // mode as of the END of last tick, since this tick hasn't recomputed it yet
+  ai.repositionElapsed = ai.mode === 'reposition' ? ai.repositionElapsed + dt : 0;
 
   const toPlayer: Vec3 = {
     x: player.pos.x - enemy.pos.x,
@@ -169,11 +182,16 @@ export function think(enemy: EnemyShip, ai: FighterAIMemory, player: Ship, dt: n
     ai.mode = 'evade';
     ai.modeTimer = tuning.evadeMinSeconds;
   } else if (ai.modeTimer <= 0) {
+    // a high repositionExtendBias plus a slow-turning hull can make the aim-angle convergence
+    // below take an unreasonably long time in the worst-case merge geometry (extending almost
+    // exactly away from the target) — force it back to 'close' once that's clearly happening
+    // instead of letting it run indefinitely (see repositionMaxSeconds's doc comment).
+    const givingUpOnReposition = ai.mode === 'reposition' && ai.repositionElapsed >= tuning.repositionMaxSeconds;
     const next = dist > tuning.closeRange
       ? 'close'
       // bad angle to the target — extend and loop back rather than trying to muscle an instant
       // reversal (how readily this triggers, and how far it commits to extending, is tuning-driven)
-      : aimAngle > tuning.overshootAngleRad ? 'reposition' : 'engage';
+      : (aimAngle > tuning.overshootAngleRad && !givingUpOnReposition) ? 'reposition' : 'engage';
     if (next !== ai.mode) ai.modeTimer = tuning.modeCommitSeconds;
     ai.mode = next;
   }
@@ -204,7 +222,11 @@ export function think(enemy: EnemyShip, ai: FighterAIMemory, player: Ship, dt: n
         z: extendDir.z * bias + toPlayerDir.z * (1 - bias)
       });
       throttle = 1;
-      boostRequested = tuning.repositionBoost;
+      // stop requesting boost once already well past closeRange — repositioning is meant to open a
+      // survivable gap to loop back from, not accelerate into a separation the player can never
+      // realistically close; unconditional boosting here (regardless of how far it had already run)
+      // was what let a long reposition turn into an unreachable, ever-growing lead.
+      boostRequested = tuning.repositionBoost && dist < tuning.closeRange * 1.4;
       break;
     }
 

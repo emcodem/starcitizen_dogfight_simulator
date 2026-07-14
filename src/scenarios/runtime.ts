@@ -29,13 +29,14 @@ export function startScenario(config: ScenarioConfig, player: Ship): ScenarioRun
     angVel: { pitch: 0, yaw: 0, roll: 0 },
     boostMeter: spawn.type.boostCapacity,
     boosting: false,
+    boostCooldownTimer: 0,
     throttleSpoolTime: 0,
     verticalSpoolTime: 0,
     health: createHealth(config.hitsToKillEnemy),
     behavior: spawn.behavior,
     turnRateRadPerSec: spawn.turnRateRadPerSec,
     ai: spawn.behavior === 'fighter'
-      ? { mode: 'close', modeTimer: 0, clock: 0, jinkSeed: Math.random() * 1000, tuning: spawn.tuning ?? FighterAI.FIGHTER_TUNING_ACE }
+      ? { mode: 'close', modeTimer: 0, clock: 0, jinkSeed: Math.random() * 1000, repositionElapsed: 0, tuning: spawn.tuning ?? FighterAI.FIGHTER_TUNING_ACE }
       : undefined,
     fireCooldown: 0
   }));
@@ -100,9 +101,10 @@ export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: numbe
 
     if (enemy.behavior === 'chaser') {
       const decision = FighterAI.chaserThink(enemy, player);
-      const boost = resolveBoost(enemy.type, enemy.boostMeter, decision.boostRequested, dt);
+      const boost = resolveBoost(enemy.type, enemy.boostMeter, enemy.boosting, enemy.boostCooldownTimer, decision.boostRequested, dt);
       enemy.boostMeter = boost.boostMeter;
       enemy.boosting = boost.boosting;
+      enemy.boostCooldownTimer = boost.cooldownTimer;
       integrateFlight(enemy, decision.inputs, dt);
 
       enemy.fireCooldown -= dt;
@@ -127,9 +129,10 @@ export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: numbe
 
     if (enemy.behavior === 'fighter' && enemy.ai) {
       const decision = FighterAI.think(enemy, enemy.ai, player, dt);
-      const boost = resolveBoost(enemy.type, enemy.boostMeter, decision.boostRequested, dt);
+      const boost = resolveBoost(enemy.type, enemy.boostMeter, enemy.boosting, enemy.boostCooldownTimer, decision.boostRequested, dt);
       enemy.boostMeter = boost.boostMeter;
       enemy.boosting = boost.boosting;
+      enemy.boostCooldownTimer = boost.cooldownTimer;
       integrateFlight(enemy, decision.inputs, dt);
 
       enemy.fireCooldown -= dt;
@@ -154,9 +157,10 @@ export function updateScenario(runtime: ScenarioRuntime, player: Ship, dt: numbe
 
     if (enemy.behavior === 'evasive' && enemy.evasive) {
       const decision = FighterAI.evasiveThink(enemy, enemy.evasive, player, dt, runtime.config.evasiveReturnFire === true);
-      const boost = resolveBoost(enemy.type, enemy.boostMeter, decision.boostRequested, dt);
+      const boost = resolveBoost(enemy.type, enemy.boostMeter, enemy.boosting, enemy.boostCooldownTimer, decision.boostRequested, dt);
       enemy.boostMeter = boost.boostMeter;
       enemy.boosting = boost.boosting;
+      enemy.boostCooldownTimer = boost.cooldownTimer;
       integrateFlight(enemy, decision.inputs, dt);
 
       enemy.fireCooldown -= dt;

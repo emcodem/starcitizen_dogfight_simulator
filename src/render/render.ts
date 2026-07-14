@@ -446,14 +446,14 @@ function drawEnemyInfo(enemy: EnemyShip, ship: Ship, cam: Camera): void {
   // offset a fixed world-space distance below the hull, converted to screen pixels via this
   // point's own scale, so the label sits just under the ship at any range instead of drifting
   // away from it as it gets closer/farther
-  const offsetY = clamp(enemy.type.hullRadius * 1.8 * p.scale, 14, 60);
+  const offsetY = clamp(enemy.type.hullRadius * 1.8 * p.scale, 18, 60);
 
   ctx.textAlign = 'center';
-  ctx.font = '10px Courier New';
+  ctx.font = '14px Courier New';
   ctx.fillStyle = 'rgba(200, 225, 215, 0.85)';
   ctx.fillText(`${distance.toFixed(0)}m`, p.x, p.y + offsetY);
   ctx.fillStyle = rangeRate < 0 ? 'rgba(125, 255, 160, 0.85)' : 'rgba(255, 150, 110, 0.85)';
-  ctx.fillText(`${rangeRate >= 0 ? '+' : ''}${rangeRate.toFixed(0)} m/s`, p.x, p.y + offsetY + 11);
+  ctx.fillText(`${rangeRate >= 0 ? '+' : ''}${rangeRate.toFixed(0)} m/s`, p.x, p.y + offsetY + 16);
 }
 
 // Recent-position history for drone-silhouette enemies (Aim Training orbiters/drifters, Merge
@@ -632,9 +632,9 @@ function drawOffscreenArrow(pos: Vec3, cam: Camera, arrowColor: string, labelCol
 
   const distance = Math.hypot(dx, dy, dz);
   ctx.textAlign = 'center';
-  ctx.font = '10px Courier New';
+  ctx.font = '14px Courier New';
   ctx.fillStyle = labelColor;
-  ctx.fillText(`${distance.toFixed(0)}m`, ex, ey + (sinA >= 0 ? 18 : -14));
+  ctx.fillText(`${distance.toFixed(0)}m`, ex, ey + (sinA >= 0 ? 20 : -16));
 }
 
 function drawOffscreenIndicators(scenario: ScenarioRuntime, cam: Camera): void {

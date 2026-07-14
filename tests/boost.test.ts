@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { step } from '../src/physics/step';
+import { resolveBoost } from '../src/physics/flightModel';
 import { makeShip } from '../src/ship/shipState';
 import { SHIP_TYPES } from '../src/ship/shipTypes';
 import { keys } from '../src/input/controlsModule';
@@ -21,7 +22,9 @@ describe('boost meter', () => {
     keys['ShiftLeft'] = true; // default boost keybind
     step(ship, 1);
     expect(ship.boosting).toBe(true);
-    expect(ship.boostMeter).toBeCloseTo(ship.type.boostCapacity - 1, 5);
+    // above the red zone, drain is boostDrainRate percent/sec (see shipTypes.ts's real-game
+    // measurement — 100%->25% in 10s)
+    expect(ship.boostMeter).toBeCloseTo(ship.type.boostCapacity - ship.type.boostDrainRate, 5);
   });
 
   it('recharges while not boosting, capped at capacity', () => {
@@ -39,8 +42,56 @@ describe('boost meter', () => {
     step(ship, 0.016);
     expect(ship.boosting).toBe(false);
     // holding the (currently ineffective) boost key doesn't block regen — it starts
-    // recharging immediately once there's nothing left to drain
+    // recharging immediately once there's nothing left to drain (no prior active burn, so
+    // there's no cooldown to wait out either — see the cooldown-delay test below)
     expect(ship.boostMeter).toBeGreaterThan(0);
+  });
+
+  it('drains faster once at/below the red zone than above it', () => {
+    const type = SHIP_TYPES[0];
+    const aboveRed = resolveBoost(type, type.boostCapacity, true, 0, true, 1);
+    const inRedZone = resolveBoost(type, type.boostRedZonePct, true, 0, true, 1);
+    const aboveDrop = type.boostCapacity - aboveRed.boostMeter;
+    const redDrop = type.boostRedZonePct - inRedZone.boostMeter;
+    expect(redDrop).toBeGreaterThan(aboveDrop);
+  });
+
+  it('an already-active burn keeps draining straight through the red zone to zero', () => {
+    const type = SHIP_TYPES[0];
+    let meter = type.boostRedZonePct + 1; // just above the red zone, already boosting
+    let boosting = true;
+    let cooldown = 0;
+    for (let i = 0; i < 600 && meter > 0; i++) {
+      const result = resolveBoost(type, meter, boosting, cooldown, true, 1 / 60);
+      meter = result.boostMeter;
+      boosting = result.boosting;
+      cooldown = result.cooldownTimer;
+    }
+    expect(meter).toBe(0);
+  });
+
+  it("won't start a fresh burn below boostReactivatePct, even though it happily continues one already in progress", () => {
+    const type = SHIP_TYPES[0];
+    // wasBoosting=false (no active burn to grandfather in), meter sitting right at the red
+    // zone threshold — a brand new request here must be refused
+    const result = resolveBoost(type, type.boostRedZonePct, false, 0, true, 1 / 60);
+    expect(result.boosting).toBe(false);
+  });
+
+  it('recharges immediately below the red zone once the delay elapses, but not above 100', () => {
+    const type = SHIP_TYPES[0];
+    const result = resolveBoost(type, 0, false, 0, false, 1);
+    // fast red-zone recharge (0%->25% in 0.4s in-game) should comfortably clear a full second
+    expect(result.boostMeter).toBeGreaterThan(type.boostRedZonePct);
+    expect(result.boostMeter).toBeLessThanOrEqual(type.boostCapacity);
+  });
+
+  it("doesn't recharge at all until boostRechargeDelaySec has elapsed since the last active tick", () => {
+    const type = SHIP_TYPES[0];
+    // cooldownTimer freshly reset to the full delay, as if boost just stopped this instant
+    const result = resolveBoost(type, 0, false, type.boostRechargeDelaySec, false, type.boostRechargeDelaySec / 2);
+    expect(result.boostMeter).toBe(0); // still within the cooldown window — no recharge yet
+    expect(result.cooldownTimer).toBeGreaterThan(0);
   });
 });
 
@@ -63,7 +114,7 @@ describe('boosted speed cap', () => {
     const ship = makeShip(SHIP_TYPES[0]);
     keys['KeyW'] = true; // default strafeForward keybind — step() derives throttle from this each tick
     keys['ShiftLeft'] = true;
-    for (let i = 0; i < 300; i++) step(ship, 1 / 60); // 5s — the full boost meter
+    for (let i = 0; i < 300; i++) step(ship, 1 / 60); // 5s — comfortably within the meter's continuous-burn duration
     setStationActive(true);
     const speed = Math.hypot(ship.vel.x, ship.vel.y, ship.vel.z);
     expect(speed).toBeGreaterThan(ship.type.scmSpeed);

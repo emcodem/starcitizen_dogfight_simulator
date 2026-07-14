@@ -17,6 +17,7 @@ function makePlayer(): Ship {
     spaceBrakeOn: false,
     boostMeter: 0,
     boosting: false,
+    boostCooldownTimer: 0,
     exploding: false,
     explosionTimer: 0,
     hitFlash: 0,

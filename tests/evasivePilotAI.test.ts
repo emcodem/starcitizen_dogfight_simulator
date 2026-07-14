@@ -19,6 +19,7 @@ function makeTestShip(pos: { x: number; y: number; z: number }): Ship {
     spaceBrakeOn: false,
     boostMeter: 0,
     boosting: false,
+    boostCooldownTimer: 0,
     exploding: false,
     explosionTimer: 0,
     hitFlash: 0,
@@ -37,6 +38,7 @@ function makeEvasiveEnemy(pos: { x: number; y: number; z: number }): EnemyShip {
     angVel: { pitch: 0, yaw: 0, roll: 0 },
     boostMeter: SHIP_TYPES[0].boostCapacity,
     boosting: false,
+    boostCooldownTimer: 0,
     throttleSpoolTime: 0,
     verticalSpoolTime: 0,
     health: createHealth(999),
@@ -57,9 +59,10 @@ function driveEvasive(enemy: EnemyShip, player: Ship, dt: number, steps: number,
     player.pos.y += player.vel.y * dt;
     player.pos.z += player.vel.z * dt;
     const decision = evasiveThink(enemy, enemy.evasive!, player, dt, returnFireEnabled);
-    const boost = resolveBoost(enemy.type, enemy.boostMeter, decision.boostRequested, dt);
+    const boost = resolveBoost(enemy.type, enemy.boostMeter, enemy.boosting, enemy.boostCooldownTimer, decision.boostRequested, dt);
     enemy.boostMeter = boost.boostMeter;
     enemy.boosting = boost.boosting;
+    enemy.boostCooldownTimer = boost.cooldownTimer;
     integrateFlight(enemy, decision.inputs, dt);
   }
 }
@@ -92,9 +95,10 @@ describe('evasiveThink', () => {
     for (let i = 0; i < 600; i++) {
       player.pos.z += player.vel.z * (1 / 60);
       const decision = evasiveThink(enemy, enemy.evasive!, player, 1 / 60, false);
-      const boost = resolveBoost(enemy.type, enemy.boostMeter, decision.boostRequested, 1 / 60);
+      const boost = resolveBoost(enemy.type, enemy.boostMeter, enemy.boosting, enemy.boostCooldownTimer, decision.boostRequested, 1 / 60);
       enemy.boostMeter = boost.boostMeter;
       enemy.boosting = boost.boosting;
+      enemy.boostCooldownTimer = boost.cooldownTimer;
       integrateFlight(enemy, decision.inputs, 1 / 60);
     }
 

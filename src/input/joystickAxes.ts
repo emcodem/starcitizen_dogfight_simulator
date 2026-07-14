@@ -1,6 +1,7 @@
 import type { AxisConcept, StickAxes } from '../types';
 import { getAxisMap, getScDevices } from './deviceState';
 import { findByVidPid, findDevice } from './gamepadModule';
+import { registerConfig } from './configRegistry';
 
 // =====================================================================
 // JoystickAxes — resolves the parsed actionmaps.xml axis bindings (or a
@@ -68,3 +69,13 @@ export function setInvert(concept: AxisConcept, val: boolean): void {
 export function getInvert(): Record<AxisConcept, boolean> {
   return invert;
 }
+
+// Was previously local-only state, silently lost on reload/preset-switch even though the UI made
+// it look like a saved setting — join the same config-registry backbone keybinds/axisMap/etc. use.
+registerConfig({
+  key: 'axisInvert',
+  serialize: () => invert,
+  deserialize: data => {
+    if (data) Object.assign(invert, data as Partial<Record<AxisConcept, boolean>>);
+  }
+});

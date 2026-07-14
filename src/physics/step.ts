@@ -50,9 +50,10 @@ export function step(
 
   const boostRequested = ControlsModule.isActive('boost') || JoystickButtons.isPressed('boost') ||
     (mouseReady && MouseButtons.isPressed('boost'));
-  const boost = resolveBoost(ship.type, ship.boostMeter, boostRequested, dt);
+  const boost = resolveBoost(ship.type, ship.boostMeter, ship.boosting, ship.boostCooldownTimer, boostRequested, dt);
   ship.boostMeter = boost.boostMeter;
   ship.boosting = boost.boosting;
+  ship.boostCooldownTimer = boost.cooldownTimer;
 
   // if we just crashed, freeze controls and count down the explosion before respawning
   if (ship.exploding) {

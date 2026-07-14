@@ -134,6 +134,17 @@ import type { ShipType } from '../types';
 //     keyboard input is instant). Fitting the clean remainder against boostSpeedForward=520 gives
 //     tau_boost ~= 1.0-1.2s => boostLinearDrag = 1/tau ~= 0.909 — notably *less* damped than plain
 //     thrust (5.18), confirming boost trades agility for top speed rather than just adding thrust.
+//   - Boost METER (stopwatch/frame-counted against the boost gauge itself, not thrust/speed): holding
+//     boost continuously drains 100%->25% in 10.00s (=> 7.5 %/s), then 25%->0% much faster, in 1s+23
+//     frames (40ms/frame) = 1.92s (=> ~13.0208 %/s) — the "red zone" below 25% burns noticeably
+//     quicker than the rest of the bar. Below 25%, a NEW boost cannot be started again until the
+//     meter climbs back to at least 26% (1% of hysteresis so it doesn't flicker right at the line) —
+//     but an already-active burn is unaffected and keeps draining straight through the red zone to
+//     zero. Recharge (not boosting) is also two-rate: 0%->25% in 10 frames = 0.4s (=> 62.5 %/s, very
+//     fast), then 25%->100% in 26.00s (=> ~2.8846 %/s, much slower). There's also a cooldown before
+//     recharge starts at all: the boost indicator dot goes red the moment boost fires and takes
+//     300ms to turn "opaque" again after it stops — recharge only begins once that 300ms has
+//     elapsed, not the instant the key is released.
 export const SHIP_TYPES: ShipType[] = [
   {
     name: 'Gladius',
@@ -154,8 +165,14 @@ export const SHIP_TYPES: ShipType[] = [
     scmSpeedBack: 225,
     boostSpeedForward: 520,
     boostSpeedBack: 268,
-    boostCapacity: 5,
-    boostRechargeRate: 0.4,
+    boostCapacity: 100,
+    boostRedZonePct: 25,
+    boostReactivatePct: 26,
+    boostDrainRate: 7.5,
+    boostDrainRateRedZone: 13.0208,
+    boostRechargeRate: 2.8846,
+    boostRechargeRateRedZone: 62.5,
+    boostRechargeDelaySec: 0.3,
     boostMaxAngVel: { pitch: 1.431, yaw: 1.082, roll: 4.189 },
     boostAngularThrust: { pitch: 14.7021, yaw: 16.7319, roll: 22.4409 },
     boostLinearThrust: { main: 709.02, retro: 365.42 },

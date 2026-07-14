@@ -16,6 +16,7 @@ export function makeShip(type: ShipType): Ship {
     spaceBrakeOn: false,
     boostMeter: type.boostCapacity,
     boosting: false,
+    boostCooldownTimer: 0,
     exploding: false,
     explosionTimer: 0,
     hitFlash: 0,
@@ -33,6 +34,7 @@ export function resetShip(ship: Ship): void {
   ship.spaceBrakeOn = false;
   ship.boostMeter = ship.type.boostCapacity;
   ship.boosting = false;
+  ship.boostCooldownTimer = 0;
   ship.exploding = false;
   ship.explosionTimer = 0;
   ship.hitFlash = 0;

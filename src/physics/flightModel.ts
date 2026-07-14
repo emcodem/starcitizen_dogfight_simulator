@@ -246,15 +246,38 @@ export function integrateFlight(body: FlightBody, input: FlightInputs, dt: numbe
   body.pos.z += body.vel.z * dt;
 }
 
-// Shared boost-meter bookkeeping: drains while boosting, recharges while not, clamped to
-// [0, boostCapacity]. Boost only actually engages if there's meter left, even if requested.
+// Shared boost-meter bookkeeping — a two-rate ("red zone") model matching real-game measurement
+// (see shipTypes.ts), not a plain linear drain/recharge:
+//   - draining is faster once at/below boostRedZonePct than above it
+//   - a NEW burn can't START while at/below boostRedZonePct (must climb back to boostReactivatePct
+//     first) — but an ALREADY-ACTIVE burn (wasBoosting) is exempt and keeps draining through to 0
+//   - recharging doesn't begin the instant boosting stops — cooldownTimer holds it at
+//     boostRechargeDelaySec after the last active tick, counting down to 0 before recharge starts
+//   - recharging itself is also two-rate, fast below the red zone and slow above it
 export function resolveBoost(
   type: ShipType,
   boostMeter: number,
+  wasBoosting: boolean,
+  cooldownTimer: number,
   requested: boolean,
   dt: number
-): { boostMeter: number; boosting: boolean } {
-  const boosting = requested && boostMeter > 0;
-  const next = clamp(boostMeter + (boosting ? -dt : dt * type.boostRechargeRate), 0, type.boostCapacity);
-  return { boostMeter: next, boosting };
+): { boostMeter: number; boosting: boolean; cooldownTimer: number } {
+  const pct = (boostMeter / type.boostCapacity) * 100;
+  const canActivate = wasBoosting || pct >= type.boostReactivatePct;
+  const boosting = requested && boostMeter > 0 && canActivate;
+
+  let nextMeter = boostMeter;
+  let nextCooldown = cooldownTimer;
+  if (boosting) {
+    const drainPctPerSec = pct <= type.boostRedZonePct ? type.boostDrainRateRedZone : type.boostDrainRate;
+    nextMeter -= (drainPctPerSec / 100) * type.boostCapacity * dt;
+    nextCooldown = type.boostRechargeDelaySec; // stays "just fired" the whole time boost is active
+  } else if (cooldownTimer > 0) {
+    nextCooldown = Math.max(0, cooldownTimer - dt);
+  } else {
+    const rechargePctPerSec = pct < type.boostRedZonePct ? type.boostRechargeRateRedZone : type.boostRechargeRate;
+    nextMeter += (rechargePctPerSec / 100) * type.boostCapacity * dt;
+  }
+
+  return { boostMeter: clamp(nextMeter, 0, type.boostCapacity), boosting, cooldownTimer: nextCooldown };
 }
