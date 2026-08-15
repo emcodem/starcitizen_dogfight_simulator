@@ -479,8 +479,16 @@ export class Renderer {
     for (const fx of world.effects) {
       if (this.emittedImpacts.has(fx)) continue;
       this.emittedImpacts.add(fx);
-      if (fx.kind === 'explosion') this.impacts.explode(fx.pos, now);
-      else this.impacts.trigger(fx.pos, fx.normal, now);
+      if (fx.kind === 'explosion') {
+        // A ship dying at point-blank/merge range (e.g. killed head-on as it flies at you) puts the
+        // fireball billboard within a few metres of the eye — see ImpactEffects.explode's distance
+        // clamp for why that needs the eye distance to avoid ballooning into a screen-covering,
+        // bloom-amplified whiteout.
+        const eyeDist = Math.hypot(fx.pos.x - eye.x, fx.pos.y - eye.y, fx.pos.z - eye.z);
+        this.impacts.explode(fx.pos, now, 1.0, eyeDist);
+      } else {
+        this.impacts.trigger(fx.pos, fx.normal, now);
+      }
     }
     this.impacts.update(now, eye);
 

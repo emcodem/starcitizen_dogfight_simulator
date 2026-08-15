@@ -265,8 +265,14 @@ function sampleFlameColor(dist: number, coreColor: THREE.Color, out: THREE.Color
     out.copy(HOT_COLOR).lerp(coreColor, t2);
   }
   const t = dist / TOTAL_SPAN;
-  out.multiplyScalar(1.1 * (1 - 0.5 * t)); // gentle brightness taper; kept modest so it stays under
-                                            // SmoothBloomPass's threshold rather than blooming into a blob
+  // Peak brightness (at the nose tip, t=0) must stay under SmoothBloomPass's 0.85 luminance
+  // threshold (render/renderer.ts) -- the previous 1.1x multiplier pushed NOSE_COLOR's R channel
+  // (1.0) up to 1.1, over threshold, so every round's nose bloomed. Harmless-looking for one round
+  // at rest, but a round fired straight at the camera is foreshortened to just its (distance-
+  // widened, see renderer.ts's thickScale) circular cross-section -- a compact, screen-fixed bloom
+  // source -- and a turret's rapid fire kept re-triggering it, reading as a flickering whiteout when
+  // facing incoming fire (reported 2026-08-16, confirmed by disabling window.__renderer.bloom).
+  out.multiplyScalar(0.8 * (1 - 0.5 * t));
   return 1 - Math.pow(t, 1.3); // long taper, like a meteor trail thinning into nothing
 }
 

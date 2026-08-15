@@ -33,11 +33,15 @@ function sweepHitsSphere(prev: Vec3, pos: Vec3, center: Vec3, radius: number): V
 // precisely-aimed shot can land anywhere inside the sphere, including almost exactly at the
 // center — not confined to the hull surface at `radius`. That's fine for damage (any point inside
 // counts as a hit) but wrong for the visual: a laser impact should spark where the beam struck the
-// hull, and for a hit on the PLAYER's own ship, the pilot camera sits at that same center in
-// first-person view, so a near-center impact origin puts the spark burst essentially on top of the
-// camera — which blew the GPU spark shader's perspective size scaling out to cover the whole screen
-// (see render/impactEffects.ts). Project back onto the hull surface so the effect always spawns at
-// a consistent `radius` distance from center, regardless of how close to dead-center the shot was.
+// hull. (This used to matter doubly for hits on the PLAYER's own ship, where the pilot camera sits
+// at that same center in first-person view, so a near-center impact origin put the spark burst
+// essentially on top of the camera and blew the GPU spark shader's perspective size scaling out to
+// cover the whole screen — see render/impactEffects.ts. resolveHits below now skips onImpact
+// entirely for player-hull hits, so that case no longer reaches this function at all; it's kept
+// here for enemy/celestial hits, where projecting onto the surface still keeps sparks looking like
+// they struck the hull rather than floating inside it.) Project back onto the hull surface so the
+// effect always spawns at a consistent `radius` distance from center, regardless of how close to
+// dead-center the shot was.
 function hullSurfaceImpact(hit: Vec3, center: Vec3, radius: number): [Vec3, Vec3] {
   const toHit = sub(hit, center);
   // A hit landing exactly at (or within floating-point noise of) dead-center makes the direction to
@@ -72,7 +76,11 @@ export function resolveHits(
           applyDamage(playerShip.health, WEAPON_DAMAGE);
           playerShip.hitFlash = 1;
           onPlayerHit?.();
-          onImpact?.(...hullSurfaceImpact(hit, playerShip.pos, playerShip.type.hullRadius));
+          // Deliberately no onImpact() here: a hit on the player's OWN hull would spawn the GPU
+          // spark burst just ~hullRadius in front of the pilot camera (see hullSurfaceImpact), which
+          // in a head-on merge could stack many near-camera additive bursts into a screen-covering
+          // whiteout + fill-rate framerate hit. The HUD's red damage-flash (ship.hitFlash, hud.ts)
+          // already tells the player they were hit; no need to also render sparks in their own face.
           projectiles.splice(i, 1);
         }
       }
