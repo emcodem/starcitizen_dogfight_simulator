@@ -74,8 +74,9 @@ the F3 menu's scenario picker. Enemy AI includes simple chaser/cruiser, orbiter/
 evasive dodge planner, and turret behavior.
 
 **Input & controls — DONE.** Keyboard/mouse (SC-style absolute virtual-joystick mouse-look with
-expo curve and deadzone), gamepad, and joystick/HOTAS support; a full F4 rebind panel with
-save/load/import/export presets and direct **actionmaps.xml import** from a real SC profile.
+expo curve and deadzone), gamepad, joystick/HOTAS, and touch/mobile support (dual floating
+thumbsticks + button cluster, gated behind touch-primary device detection); a full F4 rebind panel
+with save/load/import/export presets and direct **actionmaps.xml import** from a real SC profile.
 
 **Flight Recorder — DONE.** Always-on rolling buffer + manual recording, scrubbable playback with
 free camera, `.vreplay` export/import for sharing clips.
@@ -109,6 +110,9 @@ Flying: mouse = aim (yaw/pitch) · `W`/`S` throttle · `A`/`D` roll · `Q`/`E` y
 surface) · fire with mouse click.
 
 On foot: mouse = look · `WASD` walk · `Space` jump · `F` board (when near the ship).
+
+On touch/mobile: left stick = move/strafe · right stick = look (aim in-ship, rate-based on foot) ·
+button cluster = boost/brake/decouple/fire/vertical strafe · optional device-tilt roll/pitch assist.
 
 Top-right toggle bar: **F1** restart · **F2** fullscreen · **F3** menu / scenario picker · **F4**
 controls (rebinding, actionmaps import, joystick detection, mouse/ESP tuning) · **F6** flight
@@ -153,13 +157,13 @@ core/       renderer-agnostic sim state — ABSOLUTE f64 world coords, NO three.
 math/        vec.ts, quaternion.ts             (ported + universe-scale helpers)
 physics/     flightModel.ts (PORTED VERBATIM), shipTypes.ts (PORTED), characterController.ts
 world/       celestial.ts — starter system (SUN, PLANET, MOON) + SPAWN, plus the bright-star catalog
-input/       keyboard/mouse/gamepad/joystick, actionmaps.xml import, rebind presets
+input/       keyboard/mouse/gamepad/joystick/touch, actionmaps.xml import, rebind presets
 control/     pilot.ts, foot.ts (input -> physics), mode.ts (F/C edges, exit/enter + auto-land)
 combat/      weapons, hit detection, lead-indicator PIP, ESP assist, enemy AI, PIP Trainer
 scenarios/   data-driven training scenarios (definitions, runtime, gate-path courses)
 replay/      rolling-buffer + manual recorder, playback, .vreplay import/export
 render/      renderer.ts (three.js + floating-origin sync + bloom), camera.ts, meshes.ts, noise.ts
-ui/          F3 scenario menu, F4 controls panel, F6 replay panel, main menu
+ui/          F3 scenario menu, F4 controls panel, F6 replay panel, main menu, touch controls overlay
 hud/         hud.ts — DOM + canvas + SVG overlay (flight stats, scenario/PIP-trainer panels, ESP ring)
 main.ts      bootstrap + RAF loop (dt clamped to 50 ms, matching the original)
 ```
