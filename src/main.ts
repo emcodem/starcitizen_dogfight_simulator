@@ -9,6 +9,8 @@ import { handleEdgeActions } from './control/mode';
 import { stepCombat } from './combat/combatSystem';
 import { updateScenario, startScenario } from './scenarios/runtime';
 import { SCENARIOS } from './scenarios/definitions';
+import { getShipType } from './physics/ships';
+import { lookAtQuat, rotateVecByQuat } from './math/quaternion';
 import { updatePipTrainer, startPipTrainer, PIP_TRAINER_DEFAULTS } from './combat/pipTrainer';
 import { updateRollTrainer, startRollTrainer, ROLL_TRAINER_DEFAULTS } from './combat/rollTrainer';
 import { checkScenarioResult, checkPipTrainerResult, checkRollTrainerResult } from './ui/scenarioMenu';
@@ -55,6 +57,40 @@ initUI(world); // restores the last-active control preset, if any — see ui/con
 (window as unknown as { __startScenario: (id: string) => void }).__startScenario = (id: string) => {
   const config = SCENARIOS.find(s => s.id === id);
   if (config) startScenario(world, config);
+};
+
+// TEMP repro helper for the 2026-08-16 turret-fire blackout/flicker report: a stationary turret
+// spawned dead ahead, ALREADY aimed at the player (so it clears the 'turret' AI's ~3deg
+// AIM_FIRE_CONE_RAD gate on frame 1 — no turn-in delay), with both hit-count lose conditions set
+// effectively unreachable so the encounter just keeps firing indefinitely for repeated testing
+// (health can still drop to 0 from real damage — call this again to respawn a fresh encounter).
+// Usage: __debugPointBlankTurret() from the console, then watch for stars/lasers vanishing.
+(window as unknown as { __debugPointBlankTurret: (distanceM?: number) => void }).__debugPointBlankTurret = (distanceM = 100) => {
+  const ship = world.player.ship;
+  const fwd = rotateVecByQuat({ x: 0, y: 0, z: 1 }, ship.quat);
+  const pos = {
+    x: ship.pos.x + fwd.x * distanceM,
+    y: ship.pos.y + fwd.y * distanceM,
+    z: ship.pos.z + fwd.z * distanceM,
+  };
+  const toPlayer = { x: ship.pos.x - pos.x, y: ship.pos.y - pos.y, z: ship.pos.z - pos.z };
+  const gladius = getShipType('Gladius');
+  startScenario(world, {
+    id: 'debug-point-blank-turret',
+    name: 'Debug: Point-Blank Turret',
+    description: 'Dev repro — a turret dead ahead, already aimed, fires continuously with no gaps.',
+    enemySpawns: [{
+      type: gladius,
+      pos,
+      quat: lookAtQuat(toPlayer),
+      behavior: 'turret',
+      turnRateRadPerSec: gladius.maxAngVel.yaw,
+    }],
+    hitsToKillEnemy: 999_999,
+    hitsToKillPlayer: 999_999,
+    includeStation: false,
+    winCondition: 'survive',
+  });
 };
 
 // Same convention — live-tune the shared input expo curve from the console while comparing against

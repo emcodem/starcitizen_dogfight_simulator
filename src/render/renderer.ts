@@ -149,13 +149,28 @@ export class Renderer {
     this.camera = new THREE.PerspectiveCamera(70, 1, 0.1, 1e9);
     this.camera.position.set(0, 0, 0);
 
-    // starfield — camera-anchored celestial sphere (never translates)
+    // starfield — camera-anchored celestial sphere (never translates). Its world position is
+    // therefore always (0,0,0), same as the camera itself (see above) -- three.js's transparent-
+    // object painter's sort uses each object's world position to compute a depth key, so without
+    // this the starfield registers as being AT the camera (the nearest possible depth) rather than
+    // the background it actually represents, and can sort to render AFTER (on top of) closer
+    // transparent geometry like laser bolts. Since it's additively blended, a bright star then
+    // shows straight through regardless of what's "in front" of it, colour-independent -- and
+    // because a fast-moving bolt's screen footprint changes every frame, which stars leak through
+    // changes too, reading as a flicker (2026-08-16 turret-fire report). A very low renderOrder
+    // forces the starfield to sort first regardless of its degenerate position-based depth key.
     this.starfield = createStarfield();
+    this.starfield.renderOrder = -1000;
     this.scene.add(this.starfield);
 
     // speed-reactive ambient dust (see createSpaceDust's doc comment) — piloting-only, updated
-    // per frame in render() below
+    // per frame in render() below. Same camera-anchored-transform pattern as the starfield above
+    // (individual motes are camera-relative positions baked into the vertex buffer each frame in
+    // updateSpaceDust; the mesh's own .position is never set, staying at the default (0,0,0)) —
+    // same fix needed, or dust motes can sort-order-bleed through nearby transparent objects
+    // (e.g. laser bolts passing through the ~130m dust field) exactly like the starfield did.
     this.spaceDust = createSpaceDust(200, 130);
+    this.spaceDust.mesh.renderOrder = -999;
     this.scene.add(this.spaceDust.mesh);
 
     // celestial bodies
