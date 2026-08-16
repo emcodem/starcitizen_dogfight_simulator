@@ -93,6 +93,12 @@ initUI(world); // restores the last-active control preset, if any — see ui/con
   });
 };
 
+// Same repro, auto-started on load when the URL carries ?turretrepro — so bisecting old builds is
+// just "open the URL and look" with no console step in between.
+if (new URLSearchParams(window.location.search).has('turretrepro')) {
+  (window as unknown as { __debugPointBlankTurret: (d?: number) => void }).__debugPointBlankTurret();
+}
+
 // Same convention — live-tune the shared input expo curve from the console while comparing against
 // real SC side-by-side (e.g. __setInputExpo(1.6)). Also settable via the F4 mouse-look panel slider.
 (window as unknown as { __setInputExpo: (v: number) => void }).__setInputExpo = (v: number) => {
