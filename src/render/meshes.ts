@@ -264,15 +264,21 @@ function sampleFlameColor(dist: number, coreColor: THREE.Color, out: THREE.Color
     const t2 = Math.min((dist - NOSE_TO_HOT_LEN) / (HOT_TO_CORE_LEN - NOSE_TO_HOT_LEN), 1);
     out.copy(HOT_COLOR).lerp(coreColor, t2);
   }
-  const t = dist / TOTAL_SPAN;
-  // Peak brightness (at the nose tip, t=0) must stay under SmoothBloomPass's 0.85 luminance
-  // threshold (render/renderer.ts) -- the previous 1.1x multiplier pushed NOSE_COLOR's R channel
-  // (1.0) up to 1.1, over threshold, so every round's nose bloomed. Harmless-looking for one round
-  // at rest, but a round fired straight at the camera is foreshortened to just its (distance-
-  // widened, see renderer.ts's thickScale) circular cross-section -- a compact, screen-fixed bloom
-  // source -- and a turret's rapid fire kept re-triggering it, reading as a flickering whiteout when
-  // facing incoming fire (reported 2026-08-16, confirmed by disabling window.__renderer.bloom).
-  out.multiplyScalar(0.8 * (1 - 0.5 * t));
+  // max(0, dist) is LOAD-BEARING, not defensive tidiness: Math.pow(negative, 1.3) is NaN, and the
+  // nose-tip vertex reaches this with dist very slightly BELOW zero. Callers pass
+  // `HEAD_RADIUS - position.getZ(i)`, where HEAD_RADIUS is a JS double (0.136) but the geometry's
+  // Z came back out of a Float32Array, which rounds that same value UP to 0.13600000739097595 — so
+  // the front pole yields dist = -7.4e-9. The resulting alpha = NaN is baked into the bolt's vertex
+  // colour attribute, and one NaN texel in the scene target is enough for SmoothBloomPass's blur (a
+  // weighted sum — NaN * 0 is still NaN) to smear NaN across every texel of the mip chain, turning
+  // the ENTIRE frame black. That is the 2026-08-16 turret-fire blackout report; see
+  // BLOOM_BLACKOUT_FINDINGS.md for the full measurement trail. Clamping gives the tip alpha = 1,
+  // which is the intended value anyway — the taper is meant to run 1 at the tip down to 0 at the
+  // tail. (smoothBloomPass.ts also sanitises non-finite texels now, so a future stray NaN anywhere
+  // in the scene can't do this again; this clamp is the actual cause, that is the blast wall.)
+  const t = Math.max(0, dist) / TOTAL_SPAN;
+  out.multiplyScalar(1.1 * (1 - 0.5 * t)); // gentle brightness taper; kept modest so it stays under
+                                            // SmoothBloomPass's threshold rather than blooming into a blob
   return 1 - Math.pow(t, 1.3); // long taper, like a meteor trail thinning into nothing
 }
 

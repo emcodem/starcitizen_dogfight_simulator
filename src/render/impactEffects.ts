@@ -154,8 +154,19 @@ const sparkVertexShader = /* glsl */`
     // full-sphere spark spray sends some sparks flying straight at/through the camera, and as camDist
     // shrinks toward that 0.5 floor the raw formula still reaches ~1800x aSize (tens of thousands of
     // pixels): one giant additive point that reads as the whole screen whiting out, especially when
-    // several of a burst's 48 sparks do this in the same frame near a close explosion. Explicitly
-    // capping gl_PointSize is what actually keeps near/oblique sparks sane.
+    // several of a burst's 48 sparks do this in the same frame near a close explosion.
+    //
+    // The 96px cap is load-bearing, and measured (headless full-frame readback, peak fraction of
+    // near-white pixels over a burst's whole life, explosion spawned dead ahead of the eye):
+    //
+    //             60m         40m         20m          8m       (whole frame / screen border)
+    //   capped    4% / 0%    10% / 0%    27% /  9%    24% /  9%
+    //   uncapped  4% / 0%    10% / 0%    38% / 18%   100% / 100%   <-- total whiteout
+    //
+    // i.e. beyond ~40m the cap never binds and costs nothing; inside that it is the entire
+    // difference between "bright explosion in your face" and "frame gone". Measure this full-frame,
+    // NOT on a centre patch: the burst is spawned dead ahead, so a centre patch reads ~100% blown
+    // for a perfectly normal fireball and will fool you into "fixing" a whiteout that isn't there.
     float sizeCurve = mix(1.0, 0.15, lifeT);
     float camDist = max(length(mvPosition.xyz), 0.5);
     gl_PointSize = min(aSize * sizeCurve * alive * (uPixelRatio * 460.0 / camDist), 96.0 * uPixelRatio);
@@ -339,19 +350,7 @@ export class ImpactEffects {
   // swelling cooling FIREBALL (2 overlapping billboards for volume), and a full-sphere spray of
   // cooling sparks fired as several overlapping bursts so it reads as chaotic shrapnel, not one tidy
   // shell. Like trigger(), owns the whole ~2s visual life from here; the sim just drops the trigger.
-  //
-  // `eyeDistance` (world units, camera to origin at the instant of death) guards against a
-  // point-blank kill — an enemy destroyed at merge/ramming range, right in front of you. Shrinking
-  // the flash/fireball's world-space size at close range (tried first) wasn't enough: the bloom
-  // pass's mip-pyramid blur reads as a huge glow off the STACKED additive brightness of flash + 2
-  // fireballs + 3x48 sparks all landing on nearly the same screen pixels, regardless of how small
-  // their individual world-space footprint is -- a smaller-but-still-as-bright sprite bloomed out
-  // just as wide. Below NEAR_CAMERA_SKIP_DISTANCE, skip the flash/fireball billboards outright and
-  // keep only the sparks (small individual points, no full-screen bloom bleed even up close).
-  // Empirically verified via headless capture at several distances (see repro run 2026-08-16):
-  // 300m/60m look like a normal explosion, untouched by this; 20m/8m without the skip white out the
-  // whole frame via bloom.
-  explode(origin: Vec3, now: number, scale = 1.0, eyeDistance?: number): void {
+  explode(origin: Vec3, now: number, scale = 1.0): void {
     // Full 4π spark spray. No surface normal — sparks fly every direction; fire several overlapping
     // bursts (each capped at PARTICLES_PER_BURST) for both particle count and shape variety. High
     // speed spread + long life range means a few fast sparks streak far while most cool close in.
@@ -367,9 +366,6 @@ export class ImpactEffects {
       this.rngState = (this.rngState + 0x6d2b79f5) >>> 0;
       this.fillBurst(origin, this.computeFrame(undefined), now, sparkOpts);
     }
-
-    const NEAR_CAMERA_SKIP_DISTANCE = 40;
-    if (eyeDistance !== undefined && eyeDistance < NEAR_CAMERA_SKIP_DISTANCE) return;
 
     // Hard, brief white flash at the instant of detonation (bigger + slightly longer than an impact).
     this.spawnFlash(origin, now, 7.0 * scale, 0.16);

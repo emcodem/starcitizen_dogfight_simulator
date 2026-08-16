@@ -79,7 +79,64 @@ function linearSampledGaussian(sigma: number): { offsets: number[]; weights: num
   return { offsets, weights: weights.map((v) => v / total) };
 }
 
+// Replacement for three's LuminosityHighPassShader fragment shader, identical except that it
+// discards non-finite input texels. See the NaN note in the constructor below.
+//
+// GLSL ES 1.00 (what three compiles ShaderMaterial to by default, even on WebGL2) has no isnan(),
+// and NaN poisons every arithmetic operation it touches, so it cannot be filtered after the fact.
+// The portable test is a comparison: IEEE-754 says EVERY comparison involving NaN is false, so
+// `abs(x) < HUGE` is false for NaN and the ternary falls through to 0.0. Testing abs() against a
+// finite bound catches +/-Inf in the same expression. (Written per-component rather than with a
+// bvec3 mix(), which is GLSL ES 3.00+ only.)
+const SANITIZED_HIGH_PASS_FRAGMENT = /* glsl */`
+  uniform sampler2D tDiffuse;
+  uniform vec3 defaultColor;
+  uniform float defaultOpacity;
+  uniform float luminosityThreshold;
+  uniform float smoothWidth;
+
+  varying vec2 vUv;
+
+  float finiteOrZero(float x) {
+    return (abs(x) < 1e12) ? x : 0.0;
+  }
+
+  void main() {
+    vec4 raw = texture2D(tDiffuse, vUv);
+    vec3 texel = vec3(finiteOrZero(raw.r), finiteOrZero(raw.g), finiteOrZero(raw.b));
+
+    float v = luminance(texel); // three prepends ShaderChunk.common to every fragment shader
+
+    vec4 outputColor = vec4(defaultColor.rgb, defaultOpacity);
+
+    float alpha = smoothstep(luminosityThreshold, luminosityThreshold + smoothWidth, v);
+
+    gl_FragColor = mix(outputColor, vec4(texel, finiteOrZero(raw.a)), alpha);
+  }`;
+
 export class SmoothBloomPass extends UnrealBloomPass {
+  constructor(...args: ConstructorParameters<typeof UnrealBloomPass>) {
+    super(...args);
+
+    // NaN BLAST WALL. A Gaussian blur is a weighted sum, so a single NaN texel anywhere in the
+    // scene target makes every tap that reaches it NaN — including with weight 0, since NaN * 0 is
+    // NaN — and the mip chain then carries it to the whole image, compositing back as a fully black
+    // frame. That is not hypothetical: a laser bolt's nose vertex used to bake alpha = NaN into its
+    // colour attribute and blacked out the entire screen whenever anyone was shooting at you (see
+    // BLOOM_BLACKOUT_FINDINGS.md, and the fix at the source in render/meshes.ts).
+    //
+    // The high-pass is the right chokepoint: everything the blur ever reads comes out of
+    // renderTargetBright, which is this material's output. Filtering here means no NaN can enter the
+    // mip pyramid no matter what the scene did, so the worst a future stray NaN can cost is the
+    // handful of pixels it actually covers instead of the whole frame. Cheap (three ternaries per
+    // texel, at mip-0 resolution) and visually a no-op on finite input.
+    //
+    // Patching the parent's material rather than overriding a method because UnrealBloomPass builds
+    // materialHighPassFilter inline in its constructor with no seam to hook.
+    this.materialHighPassFilter.fragmentShader = SANITIZED_HIGH_PASS_FRAGMENT;
+    this.materialHighPassFilter.needsUpdate = true;
+  }
+
   // Overrides the parent's kernel builder. Called from UnrealBloomPass's constructor (during our
   // super() call), so this must not touch instance state — everything it needs comes from the
   // module-level helpers above. The uniform contract the parent relies on is preserved exactly:
